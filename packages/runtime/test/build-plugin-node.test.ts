@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { build } from '../../cli/src/lib/build.ts';
 import { NodePlugin } from '../../cli/src/lib/build-plugin-node.ts';
-import type { BuildContext, BuildPlugin } from '../../cli/src/lib/types.ts';
+import type { BuildContext } from '../../cli/src/lib/types.ts';
 import type { WebSocketServerMessage } from '../src/types.ts';
 
 describe('Node build plugin', () => {
@@ -179,56 +179,49 @@ describe('Node build plugin', () => {
 		await expect(build({ root, target: 'node' })).rejects.toThrow('Duplicate agent basename "assistant"');
 	});
 
-	it('allows workflow exports unrelated to Flue entrypoints', async () => {
-		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'flue-workflow-extra-exports-'));
+	it('loads workflow entrypoints exported through ordinary module syntax', async () => {
+		const root = createFixtureRoot('flue-workflow-module-exports-');
 		fs.mkdirSync(path.join(root, 'workflows'));
 		fs.writeFileSync(
 			path.join(root, 'workflows', 'draft.ts'),
-			`export interface DraftPayload { message: string }\n` +
-				`export type DraftResult = { ok: boolean }\n` +
-				`export const schema = { type: 'object' };\n` +
-				`export function helper() { return 'helper'; }\n` +
-				`export async function run() { return { ok: true }; }\n`,
+			`import { http } from '@flue/runtime';\n` +
+				`const channels = [http()];\n` +
+				`const run = async () => ({ ok: true });\n` +
+				`export { channels, run };\n`,
 		);
+		await build({ root, target: 'node' });
 
-		await expect(build({ root, plugin: parserOnlyPlugin })).resolves.toEqual({ changed: true });
+		const { child, port } = await startGeneratedServer(root);
+		try {
+			const response = await fetch(`http://localhost:${port}/workflows/draft?wait=result`, { method: 'POST' });
+			expect(response.status).toBe(200);
+			expect(await response.json()).toMatchObject({ result: { ok: true } });
+		} finally {
+			child.kill('SIGTERM');
+		}
 	});
 
-	it('allows agent exports unrelated to Flue entrypoints', async () => {
-		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'flue-agent-extra-exports-'));
+	it('loads external-channel agent receive handlers exported as values', async () => {
+		const root = createFixtureRoot('flue-agent-module-exports-');
 		fs.mkdirSync(path.join(root, 'agents'));
 		fs.writeFileSync(
 			path.join(root, 'agents', 'assistant.ts'),
-			`export interface AssistantPayload { message: string }\n` +
-				`export const metadata = { owner: 'test' };\n` +
-				`export function helper() { return 'helper'; }\n` +
-				`export default { __flueCreatedAgent: true, initialize: async () => ({ model: false }) };\n`,
+			`import { createAgent, defineChannel } from '@flue/runtime';\n` +
+				`const channels = [defineChannel('incoming')];\n` +
+				`const receive = async () => {};\n` +
+				`export { channels, receive };\n` +
+				`export default createAgent(() => ({ model: false }));\n`,
 		);
+		await build({ root, target: 'node' });
 
-		await expect(build({ root, plugin: parserOnlyPlugin })).resolves.toEqual({ changed: true });
-	});
-
-	it('rejects legacy default-export agents with triggers using a migration message', async () => {
-		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'flue-legacy-agent-'));
-		fs.mkdirSync(path.join(root, 'agents'));
-		fs.writeFileSync(
-			path.join(root, 'agents', 'draft.ts'),
-			`export const triggers = { webhook: true };\n` +
-				`export default async function handler() { return 'ok'; }\n`,
-		);
-
-		await expect(build({ root, plugin: parserOnlyPlugin })).rejects.toThrow('Found legacy 0.7 agent');
+		const { child } = await startGeneratedServer(root);
+		try {
+			expect(child.exitCode).toBeNull();
+		} finally {
+			child.kill('SIGTERM');
+		}
 	});
 });
-
-const parserOnlyPlugin: BuildPlugin = {
-	name: 'parser-only',
-	bundle: 'none',
-	entryFilename: 'server.mjs',
-	generateEntryPoint() {
-		return 'export default {};\n';
-	},
-};
 
 function createFixtureRoot(prefix: string): string {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -328,12 +321,8 @@ async function waitForServer(child: ChildProcess, port: number): Promise<void> {
 
 function testBuildContext(): BuildContext {
 	return {
-		agents: [{ name: 'triage', filePath: '/tmp/triage.ts', hasChannels: true, attachedChannels: {}, hasReceive: true, hasDefaultAgent: true }],
-		workflows: [{ name: 'daily-report', filePath: '/tmp/daily-report.ts', hasChannels: true, attachedChannels: {} }],
-		manifest: {
-			agents: [{ name: 'triage', channels: {}, receive: true, created: true }],
-			workflows: [{ name: 'daily-report', channels: {} }],
-		},
+		agents: [{ name: 'triage', filePath: '/tmp/triage.ts' }],
+		workflows: [{ name: 'daily-report', filePath: '/tmp/daily-report.ts' }],
 		root: '/tmp/flue-test',
 		output: '/tmp/flue-test/dist',
 		runtimeVersion: '0.0.0-test',

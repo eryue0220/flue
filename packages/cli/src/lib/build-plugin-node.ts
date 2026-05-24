@@ -86,7 +86,7 @@ function normalizeBuiltModules(agentModules, workflowModules) {
     const channels = normalizeChannelList(mod.channels, 'agent "' + name + '"');
     const hasExternalChannel = Object.keys(channels).some((channel) => channel !== 'http' && channel !== 'websocket');
     if (hasExternalChannel && typeof mod.receive !== 'function') {
-      throw new Error('[flue] External-channel agent "' + name + '" must export async function receive(...).');
+      throw new Error('[flue] External-channel agent "' + name + '" must export a callable receive value.');
     }
     if (typeof mod.receive === 'function' && Object.keys(channels).length === 0) {
       throw new Error('[flue] Agent "' + name + '" exports receive(...) but no channels.');
@@ -99,7 +99,7 @@ function normalizeBuiltModules(agentModules, workflowModules) {
   }
 
   for (const [name, mod] of Object.entries(workflowModules)) {
-    if (typeof mod.run !== 'function') throw new Error('[flue] Workflow "' + name + '" must export async function run(...).');
+    if (typeof mod.run !== 'function') throw new Error('[flue] Workflow "' + name + '" must export a callable run value.');
     const channels = normalizeChannelList(mod.channels, 'workflow "' + name + '"');
     for (const channel of Object.keys(channels)) {
       if (channel !== 'http' && channel !== 'websocket') {

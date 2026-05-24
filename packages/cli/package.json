@@ -30,12 +30,12 @@
 		"@vercel/detect-agent": "^1.2.3",
 		"esbuild": "^0.25.0",
 		"package-up": "^5.0.0",
-		"typescript": "^5.9.2",
 		"valibot": "^1.0.0"
 	},
 	"devDependencies": {
 		"tsdown": "^0.20.3",
 		"tsx": "^4.19.2",
+		"typescript": "^5.9.2",
 		"wrangler": "^4.83.0"
 	},
 	"peerDependencies": {

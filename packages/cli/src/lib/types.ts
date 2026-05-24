@@ -10,34 +10,16 @@
 export interface AgentInfo {
 	name: string;
 	filePath: string;
-	hasChannels: boolean;
-	attachedChannels: { http?: true; websocket?: true };
-	hasReceive: boolean;
-	hasDefaultAgent: boolean;
 }
 
 export interface WorkflowInfo {
 	name: string;
 	filePath: string;
-	hasChannels: boolean;
-	attachedChannels: { http?: true; websocket?: true };
 }
 
 export interface BuildContext {
 	agents: AgentInfo[];
 	workflows: WorkflowInfo[];
-	manifest: {
-		agents: Array<{
-			name: string;
-			channels: Record<string, true>;
-			receive: boolean;
-			created: boolean;
-		}>;
-		workflows: Array<{
-			name: string;
-			channels: { http?: boolean; websocket?: boolean };
-		}>;
-	};
 	/**
 		 * The project root — typically the user's cwd. Source files
 		 * (`agents/`) live here directly, or under `<root>/.flue/`

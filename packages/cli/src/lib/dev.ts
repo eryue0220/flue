@@ -6,26 +6,6 @@
  * edit-and-iterate command, while `flue run` is the one-shot
  * production-style invoker (build → run → exit).
  *
- * # Two very different reload models
- *
- * Node and Cloudflare use fundamentally different rebuild strategies, because
- * what they each provide downstream is fundamentally different:
- *
- * - **Node** has no host bundler. Our esbuild pass produces the final
- *   `dist/server.mjs`. On any change in the root we rebuild and respawn
- *   the child Node process. Sub-second restart is fine.
- *
- * - **Cloudflare** uses Wrangler's bundler (the same one `wrangler dev` and
- *   `wrangler deploy` use). Wrangler watches the entry's transitive import
- *   graph itself and reloads workerd on source edits. So we *don't* need to
- *   rebuild for body edits — wrangler handles it. We only need to act when:
-	 *     1. The set of agents changes (added / removed / channels changed) →
- *        regenerate `dist/_entry.ts`. Wrangler picks up the new entry
- *        automatically because it's already watching it.
- *     2. The user's `wrangler.jsonc` changes → re-merge our additions and
- *        restart the worker (config changes don't hot-apply).
- *   Pure body edits to agent files: wrangler reloads workerd; we do nothing.
- *
  * # Watching
  *
  * Watching uses `node:fs.watch` recursive (Node 20+). Debounced 150ms. The
@@ -156,7 +136,7 @@ export async function dev(options: DevOptions): Promise<void> {
 
 	if (reloader.url) {
 		console.error(`[flue] Server: ${reloader.url}`);
-		const exampleAgent = pickExampleAgentName(output, root);
+		const exampleAgent = pickExampleAgentName(root);
 		if (exampleAgent) {
 			console.error(`[flue] Try: curl -X POST ${reloader.url}/agents/${exampleAgent}/test-1 \\`);
 			console.error(`         -H 'Content-Type: application/json' -d '{}'`);
@@ -662,31 +642,6 @@ class CloudflareReloader implements DevReloader {
 		await this.startWorker();
 	}
 
-	/**
-	 * On Cloudflare, wrangler watches the entry's transitive imports itself
-	 * and hot-reloads workerd when an agent file body changes. We only need
-	 * to act when something *structural* changes — i.e. something that
-	 * affects what `_entry.ts` or `wrangler.jsonc` look like.
-	 *
-	 * Concretely, we trigger a Flue-side rebuild for:
-	 *   - File adds/removes in `agents/` (the agent set determines DO classes
-	 *     and binding declarations).
-		 *   - Changes to `agents/*.ts` — these MAY change the exported `channels`,
-	 *     so we have to re-parse them. (Plain body edits redo a tiny amount
-	 *     of work but the rebuild is cheap and idempotent.)
-	 *   - Adds/removes/edits of `app.{ts,mts,js,mjs}` — discovery flips the
-	 *     entry between the user-app form and the default-app fallback,
-	 *     and the import path is baked into `_entry.ts`. Body edits are
-	 *     handled by wrangler's source watcher, but emitting a rebuild on
-	 *     the path itself is cheap and means add/remove is correctly
-	 *     observed even when the user toggles the file in/out.
-	 *   - Changes to the user's `wrangler.jsonc` — affects the merged config.
-	 *
-	 * Notes we explicitly DO ignore for rebuild purposes (wrangler handles
-	 * them): edits to imported source files outside of `agents/`/
-	 * `app.*`, AGENTS.md, and `.agents/skills/` (those are runtime-
-	 * discovered, not baked into the entry).
-	 */
 	shouldRebuildOn(relPath: string): boolean {
 		// Env-file changes come through the watcher as absolute paths — match
 		// directly against our resolved set rather than the root-relative
@@ -701,26 +656,13 @@ class CloudflareReloader implements DevReloader {
 		) {
 			return true;
 		}
-		// Source files can live under either layout: bare (`agents/foo.ts`)
-		// or `.flue/`-as-src (`.flue/agents/foo.ts`). Match both prefixes —
-		// only one is ever in use for a given root, so accepting both
-		// is harmless.
 		if (normalized.startsWith('agents/') || normalized.startsWith('.flue/agents/')) return true;
+		if (normalized.startsWith('workflows/') || normalized.startsWith('.flue/workflows/')) return true;
 		if (/^(?:\.flue\/)?app\.(?:ts|mts|js|mjs)$/.test(normalized)) return true;
 		return false;
 	}
 
 	async reload(buildChanged: boolean): Promise<void> {
-		// The whole point of the Cloudflare path: most edits hit `agents/`
-		// bodies, and wrangler's bundler reloads workerd on its own when an
-		// imported source file changes. So if the build itself wrote nothing
-		// new (entry + wrangler.jsonc both byte-identical), there's nothing
-		// for us to do — wrangler is already on it.
-		//
-		// We only restart the worker when the build actually changed
-		// something — that signals a structural change (new agent, removed
-		// agent, channels changed, user edited wrangler.jsonc) that
-		// wrangler's source watcher can't apply hot.
 		if (!buildChanged) {
 			console.error(`[flue] No structural change — wrangler will hot-reload\n`);
 			return;
@@ -904,36 +846,13 @@ export function parseEnvFiles(absolutePaths: string[]): Record<string, string> {
 
 
 
-/**
- * Pick an agent name to print in the friendly curl example. Reads the
- * manifest written by the build at `<output>/manifest.json`, with a
- * source-tree scan fallback in case the manifest is somehow missing.
- *
- * Best-effort — silently returns null if anything goes wrong.
- */
-function pickExampleAgentName(output: string, root: string): string | null {
-	type ManifestEntry = { name: string };
-	try {
-		const manifestPath = path.join(output, 'manifest.json');
-		if (fs.existsSync(manifestPath)) {
-			const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as {
-				agents?: ManifestEntry[];
-			};
-			const agents = manifest.agents ?? [];
-			if (agents[0]) return agents[0].name;
-		}
-	} catch {
-		// Fall through to filesystem scan.
-	}
-
-	// Resolve the source root the same way build() does so this works for both
-	// the bare layout and the .flue/-as-src layout.
+function pickExampleAgentName(root: string): string | null {
 	try {
 		const agentsDir = path.join(resolveSourceRoot(root), 'agents');
 		if (!fs.existsSync(agentsDir)) return null;
-		for (const e of fs.readdirSync(agentsDir)) {
-			const m = e.match(/^([a-zA-Z0-9_-]+)\.(ts|js|mts|mjs)$/);
-			if (m?.[1]) return m[1];
+		for (const entry of fs.readdirSync(agentsDir)) {
+			const match = entry.match(/^([a-zA-Z0-9_-]+)\.(ts|js|mts|mjs)$/);
+			if (match?.[1]) return match[1];
 		}
 		return null;
 	} catch {

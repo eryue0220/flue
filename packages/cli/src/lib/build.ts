@@ -1,7 +1,6 @@
 import * as esbuild from 'esbuild';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as ts from 'typescript';
 import { packageUpSync } from 'package-up';
 import { CloudflarePlugin } from './build-plugin-cloudflare.ts';
 import { NodePlugin } from './build-plugin-node.ts';
@@ -13,298 +12,6 @@ import type {
 	BuildPlugin,
 	WorkflowInfo,
 } from './types.ts';
-
-interface ParsedAgentFile {
-	hasChannels: boolean;
-	attachedChannels: { http?: true; websocket?: true };
-	hasReceive: boolean;
-	hasDefaultAgent: boolean;
-}
-
-interface ParsedWorkflowFile {
-	hasChannels: boolean;
-	attachedChannels: { http?: true; websocket?: true };
-}
-
-/** Extract static agent metadata at build time without evaluating the agent module. */
-function parseAgentFile(filePath: string): ParsedAgentFile {
-	const source = fs.readFileSync(filePath, 'utf-8');
-	const ast = ts.createSourceFile(
-		filePath,
-		source,
-		ts.ScriptTarget.Latest,
-		true,
-		scriptKindForFile(filePath),
-	);
-	let hasChannels = false;
-	let attachedChannels: { http?: true; websocket?: true } = {};
-	const attachedChannelImports = findAttachedChannelImports(ast);
-	let hasReceive = false;
-	let hasInit = false;
-	let hasDefaultAgent = false;
-	let hasTriggers = false;
-
-	for (const statement of ast.statements) {
-		if (isDefaultExport(statement)) {
-			hasDefaultAgent = true;
-			continue;
-		}
-
-		if (ts.isExportDeclaration(statement)) {
-			throwUnsupportedAgentExportDeclaration(filePath, statement);
-		}
-
-		if (!isExportedDeclaration(statement)) continue;
-
-		if (ts.isFunctionDeclaration(statement)) {
-			const name = statement.name?.text;
-			if (!name || (name !== 'receive' && name !== 'init')) continue;
-			if (!hasModifier(statement, ts.SyntaxKind.AsyncKeyword)) {
-				throwUnsupportedAgentExports(filePath, `"${name}" must be async`);
-			}
-			if (name === 'receive') {
-				if (hasReceive) throwUnsupportedAgentExports(filePath, 'multiple "receive" exports were found');
-				hasReceive = true;
-			} else {
-				if (hasInit) throwUnsupportedAgentExports(filePath, 'multiple "init" exports were found');
-				hasInit = true;
-			}
-			continue;
-		}
-
-		if (!ts.isVariableStatement(statement)) continue;
-
-		for (const declaration of statement.declarationList.declarations) {
-			if (!ts.isIdentifier(declaration.name)) continue;
-			const name = declaration.name.text;
-			if (name === 'triggers') {
-				hasTriggers = true;
-				continue;
-			}
-			if (name !== 'channels') {
-				continue;
-			}
-			if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0) {
-				throwUnsupportedAgentChannels(filePath, 'channels must be declared with export const');
-			}
-			if (hasChannels) throwUnsupportedAgentChannels(filePath, 'multiple channels exports were found');
-			if (!declaration.initializer) throwUnsupportedAgentChannels(filePath, 'missing initializer');
-			hasChannels = true;
-			attachedChannels = extractAttachedChannels(declaration.initializer, attachedChannelImports);
-		}
-	}
-
-	if (hasTriggers) throwLegacyAgentMigrationError(filePath);
-	if (hasInit) {
-		throwUnsupportedAgentExports(filePath, '"init" exports are no longer supported; default-export createAgent(...) instead');
-	}
-	if (!hasDefaultAgent) {
-		throwUnsupportedAgentExports(filePath, 'agents must default-export createAgent(...)');
-	}
-	if (!hasChannels && hasReceive) {
-		throwUnsupportedAgentExports(filePath, '"receive" requires a "channels" export');
-	}
-
-	return { hasChannels, attachedChannels, hasReceive, hasDefaultAgent };
-}
-
-function parseWorkflowFile(filePath: string): ParsedWorkflowFile {
-	const source = fs.readFileSync(filePath, 'utf-8');
-	const ast = ts.createSourceFile(
-		filePath,
-		source,
-		ts.ScriptTarget.Latest,
-		true,
-		scriptKindForFile(filePath),
-	);
-	let hasRun = false;
-	let hasChannels = false;
-	let attachedChannels: { http?: true; websocket?: true } = {};
-	const attachedChannelImports = findAttachedChannelImports(ast);
-
-	for (const statement of ast.statements) {
-		if (isDefaultExport(statement)) {
-			throwUnsupportedWorkflowExports(filePath, 'default exports are not supported');
-		}
-
-		if (ts.isExportDeclaration(statement)) {
-			throwUnsupportedWorkflowExportDeclaration(filePath, statement);
-		}
-
-		if (!isExportedDeclaration(statement)) continue;
-
-		if (ts.isFunctionDeclaration(statement)) {
-			const name = statement.name?.text;
-			if (!name || name !== 'run') continue;
-			if (!hasModifier(statement, ts.SyntaxKind.AsyncKeyword)) {
-				throwUnsupportedWorkflowRun(filePath, '"run" must be async');
-			}
-			if (hasRun) throwUnsupportedWorkflowRun(filePath, 'multiple "run" exports were found');
-			hasRun = true;
-			continue;
-		}
-
-		if (!ts.isVariableStatement(statement)) continue;
-
-		for (const declaration of statement.declarationList.declarations) {
-			if (!ts.isIdentifier(declaration.name)) continue;
-			const name = declaration.name.text;
-			if (name === 'run') {
-				throwUnsupportedWorkflowRun(filePath, '"run" must be a direct exported async function declaration');
-			}
-			if (name !== 'channels') {
-				continue;
-			}
-			if ((statement.declarationList.flags & ts.NodeFlags.Const) === 0) {
-				throwUnsupportedWorkflowChannels(filePath, 'channels must be declared with export const');
-			}
-			if (hasChannels) throwUnsupportedWorkflowChannels(filePath, 'multiple channels exports were found');
-			if (!declaration.initializer) throwUnsupportedWorkflowChannels(filePath, 'missing initializer');
-			hasChannels = true;
-			attachedChannels = extractAttachedChannels(declaration.initializer, attachedChannelImports);
-		}
-	}
-
-	if (!hasRun) {
-		throwUnsupportedWorkflowRun(filePath, 'required direct export "export async function run(...)" was not found');
-	}
-	return { hasChannels, attachedChannels };
-}
-
-function findAttachedChannelImports(ast: ts.SourceFile): Map<string, 'http' | 'websocket'> {
-	const imports = new Map<string, 'http' | 'websocket'>();
-	for (const statement of ast.statements) {
-		if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-		if (!['@flue/runtime', '@flue/runtime/channels'].includes(statement.moduleSpecifier.text)) continue;
-		const bindings = statement.importClause?.namedBindings;
-		if (!bindings || !ts.isNamedImports(bindings)) continue;
-		for (const specifier of bindings.elements) {
-			const importedName = specifier.propertyName?.text ?? specifier.name.text;
-			if (importedName === 'http' || importedName === 'websocket') imports.set(specifier.name.text, importedName);
-		}
-	}
-	return imports;
-}
-
-function extractAttachedChannels(
-	initializer: ts.Expression,
-	imports: Map<string, 'http' | 'websocket'>,
-): { http?: true; websocket?: true } {
-	if (!ts.isArrayLiteralExpression(initializer)) return {};
-	const channels: { http?: true; websocket?: true } = {};
-	for (const element of initializer.elements) {
-		if (!ts.isCallExpression(element) || element.arguments.length !== 0 || !ts.isIdentifier(element.expression)) continue;
-		const channel = imports.get(element.expression.text);
-		if (channel) channels[channel] = true;
-	}
-	return channels;
-}
-
-function isDefaultExport(statement: ts.Statement): boolean {
-	if (ts.isExportAssignment(statement)) return true;
-	return hasModifier(statement, ts.SyntaxKind.ExportKeyword) && hasModifier(statement, ts.SyntaxKind.DefaultKeyword);
-}
-
-function isExportedDeclaration(statement: ts.Statement): boolean {
-	return hasModifier(statement, ts.SyntaxKind.ExportKeyword);
-}
-
-function hasModifier(statement: ts.Statement, kind: ts.SyntaxKind): boolean {
-	if (!ts.canHaveModifiers(statement)) return false;
-	return ts.getModifiers(statement)?.some((modifier) => modifier.kind === kind) ?? false;
-}
-
-function throwUnsupportedWorkflowExportDeclaration(
-	filePath: string,
-	statement: ts.ExportDeclaration,
-): void {
-	if (statement.isTypeOnly) {
-		return;
-	}
-	if (statement.moduleSpecifier) {
-		return;
-	}
-	if (!statement.exportClause || !ts.isNamedExports(statement.exportClause)) {
-		return;
-	}
-	const namedExports = statement.exportClause;
-	const names = namedExports.elements.filter((element) => !element.isTypeOnly).map((element) => element.name.text);
-	if (names.includes('run')) {
-		throwUnsupportedWorkflowRun(filePath, 'export lists for "run" are not supported');
-	}
-	if (names.includes('channels')) {
-		throwUnsupportedWorkflowChannels(filePath, 'export lists for "channels" are not supported');
-	}
-}
-
-function throwUnsupportedWorkflowExports(filePath: string, reason: string): never {
-	throw new Error(
-		`[flue] Unsupported workflow exports in ${filePath}: ${reason}. ` +
-			'Workflow modules must directly export "export async function run(...)"; "channels", when present, must use "export const channels = [http(), websocket()]".',
-	);
-}
-
-function throwUnsupportedWorkflowRun(filePath: string, reason: string): never {
-	throw new Error(
-		`[flue] Unsupported workflow run export in ${filePath}: ${reason}. ` +
-			'Use a direct exported async function declaration: export async function run(...).',
-	);
-}
-
-function throwUnsupportedWorkflowChannels(filePath: string, reason: string): never {
-	throw new Error(
-		`[flue] Unsupported workflow channels export in ${filePath}: ${reason}. ` +
-			'Use the direct canonical form: export const channels = [http(), websocket()]. Workflows without channels are internal-only.',
-	);
-}
-
-function throwUnsupportedAgentExportDeclaration(
-	filePath: string,
-	statement: ts.ExportDeclaration,
-): void {
-	if (statement.isTypeOnly) {
-		return;
-	}
-	if (statement.moduleSpecifier) {
-		return;
-	}
-	if (!statement.exportClause || !ts.isNamedExports(statement.exportClause)) {
-		return;
-	}
-	const names = statement.exportClause.elements.filter((element) => !element.isTypeOnly).map((element) => element.name.text);
-	if (names.includes('init') || names.includes('receive')) {
-		throwUnsupportedAgentExports(filePath, 'export lists for "init" and "receive" are not supported');
-	}
-	if (names.includes('channels')) {
-		throwUnsupportedAgentChannels(filePath, 'export lists for "channels" are not supported');
-	}
-}
-
-function throwLegacyAgentMigrationError(filePath: string): never {
-	throw new Error(
-		`[flue] Found legacy 0.7 agent in ${filePath}: default export + triggers. ` +
-			'In Flue 0.8, one-shot HTTP/webhook jobs should move to workflows/<name>.ts and export "export const channels = [http()]" plus "export async function run(...)".',
-	);
-}
-
-function throwUnsupportedAgentExports(filePath: string, reason: string): never {
-	throw new Error(
-		`[flue] Unsupported agent exports in ${filePath}: ${reason}. ` +
-			'Agent modules must default-export createAgent(...); modules using external channels must also directly export "export const channels = [...]" and "export async function receive(...)".',
-	);
-}
-
-function throwUnsupportedAgentChannels(filePath: string, reason: string): never {
-	throw new Error(
-		`[flue] Unsupported agent channels export in ${filePath}: ${reason}. ` +
-			'Use the direct canonical form: export const channels = [discord, gchat] or export const channels = [discord(), gchat()]. Agents without channels are not included in the external-channel build.',
-	);
-}
-
-function scriptKindForFile(filePath: string): ts.ScriptKind {
-	if (/\.m?js$/.test(filePath)) return ts.ScriptKind.JS;
-	return ts.ScriptKind.TS;
-}
 
 /**
  * Result returned by {@link build}. `changed` indicates whether any file in
@@ -377,33 +84,17 @@ export async function build(options: BuildOptions): Promise<BuildResult> {
 
 	fs.mkdirSync(output, { recursive: true });
 
-	const manifest = {
-		agents: agents.map((agent) => ({
-			name: agent.name,
-			channels: agent.attachedChannels,
-			receive: agent.hasReceive,
-			created: agent.hasDefaultAgent,
-		})),
-		workflows: workflows.map((workflow) => ({
-			name: workflow.name,
-			channels: workflow.attachedChannels,
-		})),
-	};
-	const manifestPath = path.join(output, 'manifest.json');
-	const manifestContents = JSON.stringify(manifest, null, 2);
 	let anyChanged = false;
-	if (!fs.existsSync(manifestPath) || fs.readFileSync(manifestPath, 'utf-8') !== manifestContents) {
-		fs.writeFileSync(manifestPath, manifestContents, 'utf-8');
-		console.log(`[flue] Generated: ${manifestPath}`);
+	const obsoleteManifestPath = path.join(output, 'manifest.json');
+	if (fs.existsSync(obsoleteManifestPath)) {
+		fs.unlinkSync(obsoleteManifestPath);
+		console.log(`[flue] Removed obsolete output: ${obsoleteManifestPath}`);
 		anyChanged = true;
-	} else {
-		console.log(`[flue] Manifest unchanged: ${manifestPath}`);
 	}
 
 	const ctx: BuildContext = {
 		agents,
 		workflows,
-		manifest,
 		root,
 		output,
 		appEntry,
@@ -578,19 +269,10 @@ function discoverAgents(sourceRoot: string): AgentInfo[] {
 		agentFiles.set(name, file);
 	}
 
-	return files.flatMap((f) => {
-		const filePath = path.join(agentsDir, f);
-		const parsed = parseAgentFile(filePath);
-		if (!parsed.hasDefaultAgent) return [];
-		return [{
-			name: f.replace(/\.(ts|js|mts|mjs)$/, ''),
-			filePath,
-			hasChannels: parsed.hasChannels,
-			attachedChannels: parsed.attachedChannels,
-			hasReceive: parsed.hasReceive,
-			hasDefaultAgent: parsed.hasDefaultAgent,
-		}];
-	});
+	return files.map((file) => ({
+		name: file.replace(/\.(ts|js|mts|mjs)$/, ''),
+		filePath: path.join(agentsDir, file),
+	}));
 }
 
 function discoverWorkflows(sourceRoot: string): WorkflowInfo[] {
@@ -617,16 +299,10 @@ function discoverWorkflows(sourceRoot: string): WorkflowInfo[] {
 		workflowFiles.set(name, file);
 	}
 
-	return files.map((file) => {
-		const filePath = path.join(workflowsDir, file);
-		const { hasChannels, attachedChannels } = parseWorkflowFile(filePath);
-		return {
-			name: file.replace(/\.(ts|js|mts|mjs)$/, ''),
-			filePath,
-			hasChannels,
-			attachedChannels,
-		};
-	});
+	return files.map((file) => ({
+		name: file.replace(/\.(ts|js|mts|mjs)$/, ''),
+		filePath: path.join(workflowsDir, file),
+	}));
 }
 
 /**
