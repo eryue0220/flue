@@ -124,3 +124,7 @@ createAgent(() => ({ model: 'cloudflare/@cf/moonshotai/kimi-k2.6' }))
 ### Agent = Deployed Workspace
 
 A repo is built and deployed as an agent. `flue build` compiles the root (skills, agents, context) into a self-contained server artifact. On every push to main, the agent is rebuilt and redeployed.
+
+## Development
+
+When using `task` to delegate to subagents, you MUST include a notice to the subagent to not spawn their own subagents. Otherwise we end up with inifinite spawning subagent chains.
