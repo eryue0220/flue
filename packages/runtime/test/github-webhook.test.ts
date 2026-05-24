@@ -34,7 +34,7 @@ describe('authored GitHub webhook channel', () => {
 			channelApps: { github: githubApp },
 			dispatchQueue: new InMemoryDispatchQueue({ process(input) { dispatches.push(input); } }),
 			resolveDispatchAgentName: (agent) => agent === target ? 'github-triage' : undefined,
-			manifest: { agents: [{ name: 'github-triage', channels: {}, receive: false, created: true }] },
+			manifest: { agents: [{ name: 'github-triage', channels: {}, created: true }] },
 		});
 		const app = new Hono();
 		app.route('/', flue());

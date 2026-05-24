@@ -18,10 +18,9 @@ import { Harness } from '../src/harness.ts';
 import type { AgentConfig, FlueHarness, FlueSession, SessionData, SessionEnv, SessionStore } from '../src/types.ts';
 
 describe('direct attached agent delivery', () => {
-	it('routes direct HTTP through init and the default session without receive or dispatch', async () => {
+	it('routes direct HTTP through init and the default session without dispatch', async () => {
 		const initCalls: string[] = [];
 		const prompts: Array<{ session: string; message: string }> = [];
-		const receiveCalls: string[] = [];
 		const dispatches: unknown[] = [];
 
 		const agent = createAgent(({ id, payload }) => {
@@ -40,12 +39,9 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: {}, receive: false, created: true }],
+				agents: [{ name: 'assistant', channels: {}, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(agent) },
-			receiveHandlers: {
-				assistant: async ({ delivery }) => receiveCalls.push(delivery.id),
-			},
 			dispatchQueue: new InMemoryDispatchQueue({
 				process(input) {
 					dispatches.push(input);
@@ -72,7 +68,6 @@ describe('direct attached agent delivery', () => {
 		expect((await res.json()) as unknown).toMatchObject({ result: { text: 'reply:hello' } });
 		expect(initCalls).toEqual(['inst-1:undefined']);
 		expect(prompts).toEqual([{ session: 'default', message: 'hello' }]);
-		expect(receiveCalls).toEqual([]);
 		expect(dispatches).toEqual([]);
 	});
 
@@ -82,7 +77,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: {}, receive: false, created: true }],
+				agents: [{ name: 'assistant', channels: {}, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			createContext: createFakeContext(prompts),
@@ -270,46 +265,11 @@ describe('direct attached agent delivery', () => {
 		expect(continuations).toBe(1);
 	});
 
-	it('keeps external-channel agents directly addressable', async () => {
-		const prompts: Array<{ session: string; message: string }> = [];
-
-		configureFlueRuntime({
-			target: 'node',
-			manifest: {
-				agents: [{ name: 'moderator', channels: { discord: true }, receive: true, created: true }],
-			},
-			handlers: { moderator: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
-			receiveHandlers: {
-				moderator: async () => {
-					throw new Error('receive should not run for direct HTTP');
-				},
-			},
-			createContext: createFakeContext(prompts),
-			runStore: new InMemoryRunStore(),
-			runRegistry: new InMemoryRunRegistry(),
-			runSubscribers: createRunSubscriberRegistry(),
-		});
-
-		const app = new Hono();
-		app.route('/', flue());
-
-		const res = await app.fetch(
-			new Request('http://localhost/agents/moderator/guild-1', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ message: 'check this' }),
-			}),
-		);
-
-		expect(res.status).toBe(200);
-		expect(prompts).toEqual([{ session: 'default', message: 'check this' }]);
-	});
-
 	it('keeps SSE streaming behavior for direct HTTP callers', async () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: {}, receive: false, created: true }],
+				agents: [{ name: 'assistant', channels: {}, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			createContext: createFakeContext([]),
@@ -341,7 +301,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: {}, receive: false, created: true }],
+				agents: [{ name: 'assistant', channels: {}, created: true }],
 			},
 			handlers: { assistant: createDirectAgentHandler(createAgent(() => ({ model: false }))) },
 			createContext: createTestContext,
@@ -370,7 +330,7 @@ describe('direct attached agent delivery', () => {
 		configureFlueRuntime({
 			target: 'node',
 			manifest: {
-				agents: [{ name: 'assistant', channels: {}, receive: false, created: true }],
+				agents: [{ name: 'assistant', channels: {}, created: true }],
 			},
 			handlers: {
 				assistant: createDirectAgentHandler(createAgent(() => ({

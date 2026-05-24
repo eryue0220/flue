@@ -390,24 +390,28 @@ describe('Node build plugin', () => {
 		}
 	});
 
-	it('loads external-channel agent receive handlers exported as values', async () => {
-		const root = createFixtureRoot('flue-agent-module-exports-');
+	it('rejects unsupported attached-channel markers on agents', async () => {
+		const root = createFixtureRoot('flue-agent-invalid-channel-');
 		fs.mkdirSync(path.join(root, 'agents'));
 		fs.writeFileSync(
 			path.join(root, 'agents', 'assistant.ts'),
-			`import { createAgent, defineChannel } from '@flue/runtime';\n` +
-				`const channels = [defineChannel('incoming')];\n` +
-				`const receive = async () => {};\n` +
-				`export { channels, receive };\n` +
+			`import { createAgent } from '@flue/runtime';\n` +
+				`export const channels = [{ __flueChannel: true, name: 'incoming' }];\n` +
 				`export default createAgent(() => ({ model: false }));\n`,
 		);
 		await build({ root, target: 'node' });
 
-		const { child } = await startGeneratedServer(root);
+		const port = await findAvailablePort();
+		const child = spawn('node', [path.join(root, 'dist', 'server.mjs')], {
+			cwd: root,
+			stdio: ['ignore', 'pipe', 'pipe'],
+			env: { ...process.env, PORT: String(port), FLUE_MODE: 'local' },
+		});
 		try {
-			expect(child.exitCode).toBeNull();
+			const output = await waitForProcessExit(child);
+			expect(output).toContain('Only http() and websocket() are supported.');
 		} finally {
-			child.kill('SIGTERM');
+			if (child.exitCode === null) child.kill('SIGTERM');
 		}
 	});
 });

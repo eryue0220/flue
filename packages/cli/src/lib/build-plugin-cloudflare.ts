@@ -258,7 +258,6 @@ function normalizeBuiltModules(agentModules, workflowModules, channelModules) {
   const createdAgents = {};
   const dispatchAgentNames = new Map();
   const websocketAgentHandlers = {};
-  const receiveHandlers = {};
   const agentRouteMiddleware = {};
   const agentWebSocketMiddleware = {};
   const workflowRouteMiddleware = {};
@@ -271,14 +270,8 @@ function normalizeBuiltModules(agentModules, workflowModules, channelModules) {
     const channels = normalizeChannelList(mod.channels, 'agent "' + name + '"');
     if (typeof mod.route === 'function') channels.http = true;
     if (typeof mod.websocket === 'function') channels.websocket = true;
-    const hasExternalChannel = Object.keys(channels).some((channel) => channel !== 'http' && channel !== 'websocket');
-    if (hasExternalChannel && typeof mod.receive !== 'function') {
-      throw new Error('[flue] External-channel agent "' + name + '" must export a callable receive value.');
-    }
-    if (typeof mod.receive === 'function' && Object.keys(channels).length === 0) {
-      throw new Error('[flue] Agent "' + name + '" exports receive(...) but no channels.');
-    }
-    manifest.agents.push({ name, channels, receive: typeof mod.receive === 'function', created: true });
+    assertDirectChannels(channels, 'agent "' + name + '"');
+    manifest.agents.push({ name, channels, created: true });
     createdAgents[name] = mod.default;
     const previousDispatchName = dispatchAgentNames.get(mod.default);
     if (previousDispatchName !== undefined) throw new Error('[flue] Agents "' + previousDispatchName + '" and "' + name + '" default-export the same created agent value. Use distinct createAgent(...) values for dispatchable agent modules.');
@@ -287,7 +280,6 @@ function normalizeBuiltModules(agentModules, workflowModules, channelModules) {
     if (channels.websocket) websocketAgentHandlers[name] = createDirectAgentHandler(mod.default);
     if (typeof mod.route === 'function') agentRouteMiddleware[name] = mod.route;
     if (typeof mod.websocket === 'function') agentWebSocketMiddleware[name] = mod.websocket;
-    if (typeof mod.receive === 'function') receiveHandlers[name] = mod.receive;
   }
 
   const workflowHandlers = {};
@@ -299,11 +291,7 @@ function normalizeBuiltModules(agentModules, workflowModules, channelModules) {
     const channels = normalizeChannelList(mod.channels, 'workflow "' + name + '"');
     if (typeof mod.route === 'function') channels.http = true;
     if (typeof mod.websocket === 'function') channels.websocket = true;
-    for (const channel of Object.keys(channels)) {
-      if (channel !== 'http' && channel !== 'websocket') {
-        throw new Error('[flue] Workflow "' + name + '" cannot subscribe to external channel "' + channel + '".');
-      }
-    }
+    assertDirectChannels(channels, 'workflow "' + name + '"');
     manifest.workflows.push({ name, channels });
     if (channels.http) workflowHandlers[name] = mod.run;
     if (channels.websocket) websocketWorkflowHandlers[name] = mod.run;
@@ -321,7 +309,7 @@ function normalizeBuiltModules(agentModules, workflowModules, channelModules) {
     }
   }
 
-  return { manifest, directHandlers, createdAgents, dispatchAgentNames, websocketAgentHandlers, receiveHandlers, workflowHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps };
+  return { manifest, directHandlers, createdAgents, dispatchAgentNames, websocketAgentHandlers, workflowHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps };
 }
 
 function normalizeChannelList(value, label) {
@@ -343,6 +331,14 @@ function normalizeChannelExport(value, label) {
   return definition;
 }
 
+function assertDirectChannels(channels, label) {
+  for (const channel of Object.keys(channels)) {
+    if (channel !== 'http' && channel !== 'websocket') {
+      throw new Error('[flue] ' + label + ' has unsupported attached channel "' + channel + '". Only http() and websocket() are supported.');
+    }
+  }
+}
+
 const agentModules = {
 ${agentModuleEntries}
 };
@@ -353,7 +349,7 @@ const channelModules = {
 ${channelModuleEntries}
 };
 const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);
-const { manifest, directHandlers, createdAgents, dispatchAgentNames, websocketAgentHandlers, receiveHandlers, workflowHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps } = normalized;
+const { manifest, directHandlers, createdAgents, dispatchAgentNames, websocketAgentHandlers, workflowHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware, channelApps } = normalized;
 const agentClassNames = {
 ${agentClassMapEntries}
 };
@@ -1016,7 +1012,6 @@ configureFlueRuntime({
   runtimeVersion: ${runtimeVersion},
   manifest,
   handlers: directHandlers,
-  receiveHandlers,
   dispatchQueue,
   resolveDispatchAgentName: (agent) => dispatchAgentNames.get(agent),
   workflowHandlers,

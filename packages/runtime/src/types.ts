@@ -16,11 +16,6 @@ export interface WorkflowChannel<TName extends 'http' | 'websocket' = 'http' | '
 	readonly name: TName;
 }
 
-export interface ChannelDefinition<TName extends string = string> {
-	readonly __flueChannel: true;
-	readonly name: TName;
-}
-
 export type ChannelEventMap = object;
 
 export interface ChannelEventContext<TEvent, TThread> {
@@ -54,19 +49,6 @@ export interface ChannelOptions<_TEvents extends ChannelEventMap, _TThread> {
 	app?: Hono<any, any, any>;
 }
 
-export interface ChannelWebhookHandler {
-	receive(request: Request, env?: unknown): Promise<Delivery> | Delivery;
-}
-
-export interface Delivery {
-	id: string;
-	channel: string;
-	type: string;
-	data: unknown;
-	occurredAt?: string;
-	raw?: unknown;
-}
-
 export interface AgentDispatchRequest {
 	id: string;
 	session?: string;
@@ -80,17 +62,6 @@ export interface NamedAgentDispatchRequest extends AgentDispatchRequest {
 export interface DispatchReceipt {
 	dispatchId: string;
 	acceptedAt: string;
-}
-
-export interface DispatchRequest extends AgentDispatchRequest {
-	agent?: string;
-}
-
-export type Dispatch = (request: DispatchRequest) => Promise<DispatchReceipt>;
-
-export interface ReceiveContext {
-	delivery: Delivery;
-	dispatch: Dispatch;
 }
 
 export interface DirectAgentPayload {
@@ -753,8 +724,6 @@ export interface DirectMessageMetadata {
 
 export interface DispatchMessageMetadata {
 	dispatchId: string;
-	deliveryId?: string;
-	sourceAgent?: string;
 	targetAgent: string;
 	agent: string;
 	id: string;

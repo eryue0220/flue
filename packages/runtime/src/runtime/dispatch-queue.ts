@@ -2,8 +2,6 @@ import type { DispatchReceipt } from '../types.ts';
 
 export interface DispatchInput {
 	dispatchId: string;
-	deliveryId?: string;
-	sourceAgent?: string;
 	targetAgent: string;
 	agent: string;
 	id: string;
@@ -27,7 +25,7 @@ export interface DispatchQueue {
  * validated, appended to this in-memory queue, and scheduled for the configured
  * processor. Queued items are lost if the process/isolate exits before the
  * placeholder processor runs. Durable backends should implement DispatchQueue
- * without changing receive()/dispatch() authoring semantics.
+ * without changing dispatch() authoring semantics.
  */
 export class InMemoryDispatchQueue implements DispatchQueue {
 	private readonly pending: DispatchInput[] = [];

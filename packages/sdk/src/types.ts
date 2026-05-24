@@ -32,8 +32,7 @@ export interface RunPointer {
 
 export interface AgentManifestEntry {
 	name: string;
-	channels: Record<string, true>;
-	receive: boolean;
+	channels: { http?: true; websocket?: true };
 	created: boolean;
 }
 

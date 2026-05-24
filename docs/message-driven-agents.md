@@ -5,7 +5,7 @@ Flue has two execution products:
 - **Workflows return results.** Use workflows for finite request/result jobs.
 - **Agents receive messages.** Use agents for addressable instances that may receive many inputs over time.
 
-This guide covers message-driven agents, direct attached surfaces, and inbound external channels. External-channel support is inbound-only today. Flue does not automatically post replies, reactions, cards, or issue comments after an agent runs. Future outward effects should happen through explicit tools.
+This guide covers message-driven agents, direct attached surfaces, and authored inbound channel applications. Channel support is inbound-only today. Flue does not automatically post replies, reactions, cards, or issue comments after an agent runs. Future outward effects should happen through explicit tools.
 
 ## Agent Model
 
@@ -91,7 +91,7 @@ await socket.prompt('Continue', { session: 'thread:1' });
 socket.close();
 ```
 
-## External Channels
+## Authored Channels
 
 Provider adapters are discovered from `.flue/channels/*` or `channels/*`. A channel owns a Hono application, parses and verifies its transport input, and emits normalized typed events. Its application is mounted below `/channels/:name/*` through `flue()`:
 
@@ -151,7 +151,7 @@ github.on('issues', async ({ event }) => {
 export default agent;
 ```
 
-External-channel delivery:
+Channel event delivery:
 
 - invokes registered `channel.on(...)` listeners for that typed event
 - lets each listener ignore, transform, or explicitly `dispatch(...)` work
@@ -160,7 +160,7 @@ External-channel delivery:
 
 ## `channel.on(...)`
 
-`channel.on(...)` is the agent-owned routing hook for external provider events. It should filter events, extract references, choose a target instance/session, and shape narrow structured input for the agent.
+`channel.on(...)` is the agent-owned routing hook for provider events emitted by an authored channel application. It should filter events, extract references, choose a target instance/session, and shape narrow structured input for the agent.
 
 ## `dispatch(...)`
 
@@ -249,7 +249,7 @@ The case/session model is application logic. For example, a moderation agent may
 
 ## Current Limitations
 
-- External-channel delivery is inbound-only.
+- Authored channel applications are inbound-only.
 - There is no universal reply/thread abstraction yet.
 - Provider retries may produce duplicate events; preserve provider ids in your input if idempotency matters.
 - The direct HTTP payload shape is provisional; WebSocket clients should use the published SDK/protocol surface.

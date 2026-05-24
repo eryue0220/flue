@@ -23,9 +23,9 @@ describe('WebSocket transport foundation', () => {
 			target: 'cloudflare',
 			manifest: {
 				agents: [
-					{ name: 'http-only', channels: { http: true }, receive: false, created: true },
-					{ name: 'socket-only', channels: { websocket: true }, receive: false, created: true },
-					{ name: 'dual', channels: { http: true, websocket: true }, receive: false, created: true },
+					{ name: 'http-only', channels: { http: true }, created: true },
+					{ name: 'socket-only', channels: { websocket: true }, created: true },
+					{ name: 'dual', channels: { http: true, websocket: true }, created: true },
 				],
 				workflows: [
 					{ name: 'http-job', channels: { http: true } },
@@ -46,7 +46,7 @@ describe('WebSocket transport foundation', () => {
 			target: 'node',
 			handlers: { legacy: async () => null },
 			manifest: {
-				agents: [{ name: 'legacy', channels: {}, receive: false, created: true }],
+				agents: [{ name: 'legacy', channels: {}, created: true }],
 			},
 		};
 
@@ -92,8 +92,8 @@ describe('WebSocket transport foundation', () => {
 			target: 'cloudflare',
 			manifest: {
 				agents: [
-					{ name: 'assistant', channels: { websocket: true }, receive: false, created: true },
-					{ name: 'http-agent', channels: { http: true }, receive: false, created: true },
+					{ name: 'assistant', channels: { websocket: true }, created: true },
+					{ name: 'http-agent', channels: { http: true }, created: true },
 				],
 				workflows: [
 					{ name: 'job', channels: { websocket: true } },
@@ -126,7 +126,7 @@ describe('WebSocket transport foundation', () => {
 		configureFlueRuntime({
 			target: 'cloudflare',
 			manifest: {
-				agents: [{ name: 'assistant', channels: { http: true, websocket: true }, receive: false, created: true }],
+				agents: [{ name: 'assistant', channels: { http: true, websocket: true }, created: true }],
 			},
 			agentRouteMiddleware: {
 				assistant: async (c, next) => {
@@ -160,7 +160,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = 0;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, receive: false, created: true }] },
+			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
 			agentRouteMiddleware: {
 				assistant: async (_c, next) => {
 					await next();
@@ -185,7 +185,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = false;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, receive: false, created: true }] },
+			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
 			agentRouteMiddleware: { assistant: async () => undefined },
 			routeAgentRequest: async () => {
 				forwarded = true;
@@ -205,7 +205,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = false;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, receive: false, created: true }] },
+			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
 			agentRouteMiddleware: {
 				assistant: async (c) => {
 					c.res = c.text('Assigned Unauthorized', 401);
@@ -230,7 +230,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = false;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, receive: false, created: true }] },
+			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, created: true }] },
 			agentWebSocketMiddleware: { assistant: async () => undefined },
 			routeAgentRequest: async () => {
 				forwarded = true;
@@ -251,7 +251,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = false;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, receive: false, created: true }] },
+			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, created: true }] },
 			agentWebSocketMiddleware: {
 				assistant: async (c) => {
 					c.res = c.text('Assigned Socket Unauthorized', 401);
@@ -277,7 +277,7 @@ describe('WebSocket transport foundation', () => {
 		let forwarded = false;
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, receive: false, created: true }] },
+			manifest: { agents: [{ name: 'assistant', channels: { websocket: true }, created: true }] },
 			routeAgentRequest: async () => {
 				forwarded = true;
 				return Response.json({ ok: true });
@@ -333,7 +333,7 @@ describe('WebSocket transport foundation', () => {
 		});
 		configureFlueRuntime({
 			target: 'node',
-			manifest: { agents: [{ name: 'assistant', channels: { http: true }, receive: false, created: true }] },
+			manifest: { agents: [{ name: 'assistant', channels: { http: true }, created: true }] },
 			handlers: {
 				assistant: async () => {
 					await pending;

@@ -76,7 +76,7 @@ async function startAgentSocket(): Promise<{ socket: WebSocket; messages: WebSoc
 function createTransport(): NodeWebSocketTransport {
 	return createNodeWebSocketTransport({
 		manifest: {
-			agents: [{ name: 'assistant', channels: { websocket: true }, receive: false, created: true }],
+			agents: [{ name: 'assistant', channels: { websocket: true }, created: true }],
 		},
 		agentHandlers: {
 			assistant: async (ctx) => ctx.payload,

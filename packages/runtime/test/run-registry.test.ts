@@ -819,7 +819,7 @@ describe('Bare /runs/:runId routes via flue()', () => {
 
 		configureFlueRuntime({
 			target: 'cloudflare',
-			manifest: { agents: [{ name: 'hello', channels: { http: true }, receive: false, created: false }] },
+			manifest: { agents: [{ name: 'hello', channels: { http: true }, created: false }] },
 			routeAgentRequest: async (request) => {
 				routedBodies.push(await request.text());
 				return Response.json({ ok: true });
@@ -934,8 +934,8 @@ describe('admin() routes', () => {
 			runtimeVersion: '9.9.9',
 			manifest: {
 				agents: [
-					{ name: 'hello', channels: {}, receive: false, created: false },
-					{ name: 'offline', channels: {}, receive: false, created: false },
+					{ name: 'hello', channels: {}, created: false },
+					{ name: 'offline', channels: {}, created: false },
 				],
 			},
 			handlers: { hello: async () => ({ ok: true }) },
@@ -1020,7 +1020,7 @@ describe('admin() routes', () => {
 		configureFlueRuntime({
 			target: 'cloudflare',
 			runtimeVersion: '9.9.9',
-			manifest: { agents: [{ name: 'hello', channels: {}, receive: false, created: false }] },
+			manifest: { agents: [{ name: 'hello', channels: {}, created: false }] },
 			createRunRegistryForRequest: () => ({
 				recordRunStart: async () => {},
 				recordRunEnd: async () => {},
@@ -1055,7 +1055,7 @@ describe('admin() routes', () => {
 		configureFlueRuntime({
 			target: 'cloudflare',
 			runtimeVersion: '9.9.9',
-			manifest: { agents: [{ name: 'hello', channels: {}, receive: false, created: false }] },
+			manifest: { agents: [{ name: 'hello', channels: {}, created: false }] },
 			createRunRegistryForRequest: () => ({
 				recordRunStart: async () => {},
 				recordRunEnd: async () => {},

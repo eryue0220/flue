@@ -64,8 +64,4 @@ describe('defineChannel', () => {
 		expect(received).toEqual(['kept:user:1']);
 		expect(result).toEqual({ invoked: 1, errors: [] });
 	});
-
-	it('temporarily preserves the legacy provider marker overload during migration', () => {
-		expect(defineChannel('github')).toEqual({ __flueChannel: true, name: 'github' });
-	});
 });

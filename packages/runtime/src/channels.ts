@@ -1,5 +1,4 @@
 import type {
-	ChannelDefinition,
 	ChannelEventMap,
 	ChannelEventContext,
 	ChannelListener,
@@ -18,16 +17,11 @@ export function websocket(): WorkflowChannel<'websocket'> {
 
 export function defineChannel<TEvents extends ChannelEventMap, TThread>(
 	options: ChannelOptions<TEvents, TThread>,
-): DefinedChannel<TEvents, TThread>;
-export function defineChannel<const TName extends string>(type: TName): ChannelDefinition<TName>;
-export function defineChannel<TEvents extends ChannelEventMap, TThread, const TName extends string>(
-	optionsOrType: ChannelOptions<TEvents, TThread> | TName,
-): DefinedChannel<TEvents, TThread> | ChannelDefinition<TName> {
-	if (typeof optionsOrType === 'string') return { __flueChannel: true, name: optionsOrType };
+): DefinedChannel<TEvents, TThread> {
 	const listeners = new Map<string, Set<ChannelListener<unknown, TThread>>>();
 	return {
 		__flueDefinedChannel: true,
-		app: optionsOrType.app,
+		app: options.app,
 		on(type, listener) {
 			let registered = listeners.get(type);
 			if (!registered) {

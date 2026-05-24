@@ -1,8 +1,6 @@
-import { createAgent, defineAgentProfile, type ReceiveContext } from '@flue/runtime';
-import { channel as discord } from '../channels/discord';
-import { channel as gchat } from '../channels/gchat';
-
-export const channels = [discord(), gchat()];
+import { createAgent, defineAgentProfile, dispatch } from '@flue/runtime';
+import discord from '../channels/discord';
+import gchat from '../channels/gchat';
 
 const moderator = defineAgentProfile({
 	model: 'anthropic/claude-haiku-4-5',
@@ -13,51 +11,37 @@ Do not attempt to post back to either platform; outbound actions are not part of
 `,
 });
 
-export async function receive({ delivery, dispatch }: ReceiveContext) {
-	if (delivery.channel === 'discord' && delivery.type === 'message.created') {
-		const data = delivery.data as {
-			guildId?: string;
-			caseId?: string;
-			message?: { id?: string; authorId?: string; text?: string };
-		};
-		if (!data.guildId || !data.caseId || !data.message?.text) return;
-		if (!looksFlagged(data.message.text)) return;
+const agent = createAgent(() => ({ profile: moderator }));
 
-		await dispatch({
-			id: `guild:${data.guildId}`,
-			session: `case:${data.caseId}`,
-			input: {
-				type: 'discord.message.flagged',
-				deliveryId: delivery.id,
-				message: data.message,
-			},
-		});
-		return;
-	}
+discord.on('message.created', async ({ event }) => {
+	if (!event.guildId || !event.caseId || !event.message?.text) return;
+	if (!looksFlagged(event.message.text)) return;
+	await dispatch(agent, {
+		id: `guild:${event.guildId}`,
+		session: `case:${event.caseId}`,
+		input: {
+			type: 'discord.message.flagged',
+			deliveryId: event.deliveryId,
+			message: event.message,
+		},
+	});
+});
 
-	if (delivery.channel === 'gchat' && delivery.type === 'message.created') {
-		const data = delivery.data as {
-			guildId?: string;
-			caseId?: string;
-			reviewerId?: string;
-			message?: string;
-		};
-		if (!data.guildId || !data.caseId || !data.message) return;
+gchat.on('message.created', async ({ event }) => {
+	if (!event.guildId || !event.caseId || !event.message) return;
+	await dispatch(agent, {
+		id: `guild:${event.guildId}`,
+		session: `case:${event.caseId}`,
+		input: {
+			type: 'gchat.moderator_discussion',
+			deliveryId: event.deliveryId,
+			reviewerId: event.reviewerId,
+			message: event.message,
+		},
+	});
+});
 
-		await dispatch({
-			id: `guild:${data.guildId}`,
-			session: `case:${data.caseId}`,
-			input: {
-				type: 'gchat.moderator_discussion',
-				deliveryId: delivery.id,
-				reviewerId: data.reviewerId,
-				message: data.message,
-			},
-		});
-	}
-}
-
-export default createAgent(() => ({ profile: moderator }));
+export default agent;
 
 function looksFlagged(text: string): boolean {
 	return /\b(flag|abuse|spam)\b/i.test(text);

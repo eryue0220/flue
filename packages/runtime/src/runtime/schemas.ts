@@ -255,8 +255,10 @@ export const AgentRouteParamSchema = v.object({ name: v.string(), id: v.string()
 
 export const AgentManifestEntrySchema = v.object({
 	name: v.string(),
-	channels: v.record(v.string(), v.literal(true)),
-	receive: v.boolean(),
+	channels: v.object({
+		http: v.optional(v.literal(true)),
+		websocket: v.optional(v.literal(true)),
+	}),
 	created: v.boolean(),
 });
 

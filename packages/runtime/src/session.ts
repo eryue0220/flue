@@ -417,15 +417,17 @@ function createUserContextMessage(text: string, timestamp: string): AgentMessage
 
 function renderDispatchInput(input: DispatchInput): string {
 	const lines = [
-		'[External Dispatch Input]',
+		'[Dispatch Input]',
 		`agent: ${input.agent}`,
 		`id: ${input.id}`,
 		`session: ${input.session}`,
+		`targetAgent: ${input.targetAgent}`,
+		`dispatchId: ${input.dispatchId}`,
+		`acceptedAt: ${input.acceptedAt}`,
+		'',
+		'input:',
+		stableStringify(input.input),
 	];
-	if (input.sourceAgent) lines.push(`sourceAgent: ${input.sourceAgent}`);
-	lines.push(`targetAgent: ${input.targetAgent}`, `dispatchId: ${input.dispatchId}`);
-	if (input.deliveryId) lines.push(`deliveryId: ${input.deliveryId}`);
-	lines.push(`acceptedAt: ${input.acceptedAt}`, '', 'input:', stableStringify(input.input));
 	return lines.join('\n');
 }
 
@@ -439,8 +441,6 @@ function dispatchMetadata(input: DispatchInput): DispatchMessageMetadata {
 		acceptedAt: input.acceptedAt,
 		input: input.input,
 	};
-	if (input.deliveryId) metadata.deliveryId = input.deliveryId;
-	if (input.sourceAgent) metadata.sourceAgent = input.sourceAgent;
 	return metadata;
 }
 

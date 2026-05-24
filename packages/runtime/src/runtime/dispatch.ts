@@ -1,99 +1,24 @@
-import type { Delivery, Dispatch, DispatchReceipt, DispatchRequest, NamedAgentDispatchRequest } from '../types.ts';
+import type { DispatchReceipt, NamedAgentDispatchRequest } from '../types.ts';
 import type { DispatchQueue } from './dispatch-queue.ts';
 
-export interface ExternalChannelRuntime {
+export interface DispatchRuntime {
 	manifest?: {
 		agents: Array<{
 			name: string;
-			channels: Record<string, true>;
 		}>;
 	};
-	receiveHandlers?: Record<string, AgentReceiveHandler>;
-	dispatchQueue?: DispatchQueue;
-}
-
-export type AgentReceiveHandler = (ctx: {
-	delivery: Delivery;
-	dispatch: Dispatch;
-}) => unknown | Promise<unknown>;
-
-export async function receiveExternalDelivery(
-	delivery: Delivery,
-	rt: ExternalChannelRuntime,
-	options: { dispatchQueue?: DispatchQueue } = {},
-): Promise<{ invoked: string[]; errors: Array<{ agent: string; error: unknown }> }> {
-	const invoked: string[] = [];
-	const errors: Array<{ agent: string; error: unknown }> = [];
-	const dispatchQueue = options.dispatchQueue ?? rt.dispatchQueue ?? defaultDispatchQueue;
-	for (const agent of rt.manifest?.agents ?? []) {
-		if (!agent.channels[delivery.channel]) continue;
-		const receive = rt.receiveHandlers?.[agent.name];
-		if (!receive) {
-			const error = new Error(`[flue] Agent "${agent.name}" is subscribed to "${delivery.channel}" but has no receive handler.`);
-			errors.push({ agent: agent.name, error });
-			console.error(error.message);
-			continue;
-		}
-		invoked.push(agent.name);
-		try {
-			const deliveryForAgent = cloneJsonSerializable(delivery, 'delivery') as Delivery;
-			await receive({
-				delivery: deliveryForAgent,
-				dispatch: createDispatchFn({
-					delivery: deliveryForAgent,
-					sourceAgent: agent.name,
-					dispatchQueue,
-					rt,
-				}),
-			});
-		} catch (error) {
-			errors.push({ agent: agent.name, error });
-			console.error(`[flue:receive] Agent "${agent.name}" receive() failed:`, error);
-		}
-	}
-	return { invoked, errors };
-}
-
-const defaultDispatchQueue: DispatchQueue = {
-	async enqueue(): Promise<never> {
-		throw new Error('[flue] dispatch() cannot be accepted because no dispatch queue is configured.');
-	},
-};
-
-function createDispatchFn(options: {
-	delivery: Delivery;
-	sourceAgent: string;
-	dispatchQueue: DispatchQueue;
-	rt: ExternalChannelRuntime;
-}): Dispatch {
-	return async (request) => enqueueDispatch({
-		request: {
-			agent: request.agent ?? options.sourceAgent,
-			id: request.id,
-			session: request.session,
-			input: request.input,
-		},
-		deliveryId: options.delivery.id,
-		sourceAgent: options.sourceAgent,
-		dispatchQueue: options.dispatchQueue,
-		rt: options.rt,
-	});
 }
 
 export async function enqueueDispatch(options: {
 	request: NamedAgentDispatchRequest;
 	dispatchQueue: DispatchQueue;
-	rt: ExternalChannelRuntime;
-	deliveryId?: string;
-	sourceAgent?: string;
+	rt: DispatchRuntime;
 }): Promise<DispatchReceipt> {
 	const targetAgent = options.request.agent;
 	const input = validateAndCloneDispatchRequest(options.request, targetAgent, options.rt);
 	const session = options.request.session ?? 'default';
 	return options.dispatchQueue.enqueue({
 		dispatchId: crypto.randomUUID(),
-		deliveryId: options.deliveryId,
-		sourceAgent: options.sourceAgent,
 		targetAgent,
 		agent: targetAgent,
 		id: options.request.id,
@@ -104,9 +29,9 @@ export async function enqueueDispatch(options: {
 }
 
 function validateAndCloneDispatchRequest(
-	request: DispatchRequest,
+	request: NamedAgentDispatchRequest,
 	targetAgent: string,
-	rt: ExternalChannelRuntime,
+	rt: DispatchRuntime,
 ): unknown {
 	if (typeof targetAgent !== 'string' || targetAgent.trim() === '') {
 		throw new Error('[flue] dispatch() requires a non-empty target agent.');
@@ -126,7 +51,7 @@ function validateAndCloneDispatchRequest(
 	return cloneJsonSerializable(request.input, 'dispatch().input');
 }
 
-function agentExists(rt: ExternalChannelRuntime, agentName: string): boolean {
+function agentExists(rt: DispatchRuntime, agentName: string): boolean {
 	return (rt.manifest?.agents ?? []).some((agent) => agent.name === agentName);
 }
 

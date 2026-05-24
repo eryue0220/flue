@@ -4,7 +4,7 @@ Build and deploy Flue agents as a Node.js server. This guide walks you through c
 
 By the end, you will have a Flue agent running as a Node.js server, and you will know how to add subagents, sandbox context, external CLIs, remote sandboxes, and durable session storage when your agent needs them.
 
-This guide focuses on deploying the generated Node server. For the message-driven agent API model, including direct HTTP/WebSocket `/agents/:name/:id` delivery and inbound external-channel `/channels/:channel` webhooks, see [Message-Driven Agents](message-driven-agents.md).
+This guide focuses on deploying the generated Node server. For the message-driven agent API model, including direct HTTP/WebSocket `/agents/:name/:id` delivery and authored channel applications beneath `/channels/:channel/*`, see [Message-Driven Agents](message-driven-agents.md).
 
 ## Project layout
 

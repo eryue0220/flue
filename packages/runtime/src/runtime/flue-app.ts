@@ -28,7 +28,7 @@ import {
 	type WorkflowHandler,
 } from './handle-agent.ts';
 import type { DispatchQueue } from './dispatch-queue.ts';
-import { enqueueDispatch, receiveExternalDelivery as receiveExternalDeliveryWithRuntime, type AgentReceiveHandler } from './external-channels.ts';
+import { enqueueDispatch } from './dispatch.ts';
 import { type HandleRunRouteOptions, handleRunRouteRequest } from './handle-run-routes.ts';
 import { generateWorkflowRunId } from './ids.ts';
 import type { RunPointer, RunRegistry } from './run-registry.ts';
@@ -57,7 +57,6 @@ export interface FlueRuntime {
 	 * Map of agent name -> direct HTTP handler function.
 	 */
 	handlers?: Record<string, AgentHandler>;
-	receiveHandlers?: Record<string, AgentReceiveHandler>;
 	workflowHandlers?: Record<string, WorkflowHandler>;
 	agentRouteMiddleware?: Record<string, MiddlewareHandler>;
 	agentWebSocketMiddleware?: Record<string, MiddlewareHandler>;
@@ -140,8 +139,7 @@ export interface FlueRuntime {
 export interface FlueManifest {
 	agents: Array<{
 		name: string;
-		channels: Record<string, true>;
-		receive: boolean;
+		channels: { http?: true; websocket?: true };
 		created: boolean;
 	}>;
 	workflows?: Array<{
@@ -157,20 +155,6 @@ const RUN_ROUTES_BY_ID: ReadonlyArray<readonly [string, HandleRunRouteOptions['a
 	['/runs/:runId/events', 'events'],
 	['/runs/:runId/stream', 'stream'],
 ];
-
-export async function receiveExternalDelivery(
-	delivery: Parameters<typeof receiveExternalDeliveryWithRuntime>[0],
-	options?: Parameters<typeof receiveExternalDeliveryWithRuntime>[2],
-): ReturnType<typeof receiveExternalDeliveryWithRuntime> {
-	const rt = runtimeConfig;
-	if (!rt) {
-		throw new Error(
-			'[flue] receiveExternalDelivery() called before runtime was configured. ' +
-				'This usually means it was used outside a Flue-built server entry.',
-		);
-	}
-	return receiveExternalDeliveryWithRuntime(delivery, rt, options);
-}
 
 export function dispatch(agent: CreatedAgent, request: AgentDispatchRequest): Promise<DispatchReceipt>;
 export function dispatch(request: NamedAgentDispatchRequest): Promise<DispatchReceipt>;
