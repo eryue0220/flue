@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.8.1 - 2026-05-28
+
+### New Features
+
+- **OpenTelemetry tracing integration.** Added `@flue/opentelemetry` for tracing Flue model turns through OpenTelemetry-compatible observability tooling.
+
+### Fixes & Other Changes
+
+- Reduced routine runtime console logging and expanded the published documentation and website guidance.
+
 ## 0.8.0 - 2026-05-27
 
 This is a large pre-1.0 release that establishes Flue's model for building persistent agents and finite workflows. Rather than cataloging every intermediate beta change, this entry highlights the final APIs and the most important upgrade work. For guides and API reference, see the [documentation sources](https://github.com/withastro/flue/tree/main/apps/docs/src/content/docs) while the documentation site is being finalized.
