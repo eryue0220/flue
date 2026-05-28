@@ -1752,7 +1752,7 @@ export class Session implements FlueSession {
 		message: string,
 		attributes?: Record<string, unknown>,
 	): void {
-		console.error(message);
+		if (level === 'error') console.error(message);
 		this.emit({ type: 'log', level, message, attributes: normalizeLogAttributes(attributes) });
 	}
 

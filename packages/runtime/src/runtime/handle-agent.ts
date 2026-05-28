@@ -239,8 +239,6 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 		if (isSSE && wait !== 'result' && !runSubscribers) throw new Error('[flue] Workflow SSE requires a run subscriber registry.');
 
 		const execution = await prepareWorkflowExecution({
-			label: workflowName,
-			observationMode: wait === 'result' ? 'wait_result' : isSSE ? 'sse' : 'accepted',
 			owner,
 			id: runId,
 			runId,
@@ -342,8 +340,6 @@ async function waitForAgentSessionLock(target: AgentSessionTarget, payload: unkn
 }
 
 interface WorkflowAdmissionOptions {
-	label: string;
-	observationMode: 'accepted' | 'sse' | 'wait_result' | 'websocket';
 	owner: RunOwner;
 	id: string;
 	runId: string;
@@ -362,9 +358,6 @@ interface WorkflowAdmissionOptions {
 }
 
 interface AdmittedWorkflowExecution {
-	label: string;
-	observationMode: 'accepted' | 'sse' | 'wait_result' | 'websocket';
-	owner: RunOwner;
 	runId: string;
 	runStore: RunStore;
 	runSubscribers?: RunSubscriberRegistry;
@@ -379,8 +372,6 @@ interface AdmittedWorkflowExecution {
 
 async function prepareWorkflowExecution(opts: WorkflowAdmissionOptions): Promise<AdmittedWorkflowExecution> {
 	const {
-		label,
-		observationMode,
 		owner,
 		id,
 		runId,
@@ -411,12 +402,12 @@ async function prepareWorkflowExecution(opts: WorkflowAdmissionOptions): Promise
 		restartedFromRunId,
 		requirePersistedAdmission: true,
 	});
-	return { label, observationMode, owner, runId, runStore, runSubscribers, lifecycle, startWorkflowAdmission, handler, onAdmitted, onEvent, emitIdleOnComplete };
+	return { runId, runStore, runSubscribers, lifecycle, startWorkflowAdmission, handler, onAdmitted, onEvent, emitIdleOnComplete };
 }
 
 function startWorkflowExecution(execution: AdmittedWorkflowExecution): Promise<unknown> {
 	if (execution.completion) return execution.completion;
-	const { label, observationMode, runId, lifecycle, handler, startWorkflowAdmission, onEvent, emitIdleOnComplete } = execution;
+	const { runId, lifecycle, handler, startWorkflowAdmission, onEvent, emitIdleOnComplete } = execution;
 	let didRun = false;
 	let didEmitIdle = false;
 	if (onEvent || emitIdleOnComplete) {
@@ -455,14 +446,6 @@ function startWorkflowExecution(execution: AdmittedWorkflowExecution): Promise<u
 		}
 		throw error;
 	});
-	execution.completion.then(
-		(result) => {
-			console.log('[flue] Workflow completed:', { workflowName: label, observationMode, runId, outcome: 'completed' }, result !== undefined ? JSON.stringify(result) : '(no return)');
-		},
-		(error) => {
-			console.error('[flue] Workflow error:', { workflowName: label, observationMode, runId, operation: 'execution', outcome: 'failed' }, error);
-		},
-	);
 	return execution.completion;
 }
 
@@ -725,8 +708,6 @@ async function runSyncMode(execution: AdmittedWorkflowExecution): Promise<Respon
 export async function invokeWorkflowAttached(opts: InvokeWorkflowAttachedOptions): Promise<WorkflowAttachedInvocationResult> {
 	if (!opts.startWorkflowAdmission) return invokeWorkflowAttachedUnlocked(opts);
 	const execution = await prepareWorkflowExecution({
-		label: opts.owner.workflowName,
-		observationMode: 'websocket',
 		owner: opts.owner,
 		id: opts.id,
 		runId: opts.runId,
