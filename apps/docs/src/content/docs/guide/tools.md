@@ -59,7 +59,7 @@ export default createAgent(() => ({
 
 When this agent receives a request, the model can call `lookup_order_status` if it needs the current status before composing its answer. The call and returned text become part of the session context so the agent can continue working with the result.
 
-Attach tools this way when they are part of an agent's ordinary capabilities. When a tool is needed for only one bounded action, you can instead provide it in the options for `session.prompt(...)`, `session.skill(...)`, or `session.task(...)`; see the [Harness API](/docs/api/harness-api/).
+Attach tools this way when they are part of an agent's ordinary capabilities. When a tool is needed for only one bounded action, you can instead provide it in the options for `session.prompt(...)`, `session.skill(...)`, or `session.task(...)`; see the [Agent API](/docs/api/agent-api/).
 
 ## Protect access
 
@@ -152,4 +152,4 @@ Provide MCP credentials and connection settings from trusted application code, t
 - [Workflows](/docs/guide/workflows/) — initialize agent work with invocation-specific tools.
 - [Skills](/docs/guide/skills/) — add reusable instructions that may direct an agent to use its tools.
 - [Sandboxes](/docs/guide/sandboxes/) — control the workspace and command boundary available to agent work.
-- [Harness API](/docs/api/harness-api/) — look up operation options, including tools supplied for one call.
+- [Agent API](/docs/api/agent-api/) — look up operation options, including tools supplied for one call.

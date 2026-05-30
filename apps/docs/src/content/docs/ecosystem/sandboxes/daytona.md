@@ -1,6 +1,7 @@
 ---
 title: Daytona
 description: Connect a Flue agent to an application-owned Daytona sandbox.
+lastReviewedAt: 2026-05-30
 ---
 
 The Daytona connector adapts an already-initialized Daytona sandbox from `@daytona/sdk` into Flue's `SandboxFactory` interface. Use it when a Node-hosted application needs a provider-managed sandbox with filesystem and shell operations.
@@ -40,4 +41,4 @@ const agent = createAgent(() => ({
 
 Delete an ephemeral sandbox in application code after bounded work completes. If a continuing agent instance should reuse a remote workspace, map instance identity to sandbox identity and implement retention and cleanup deliberately.
 
-See [Sandboxes](/docs/guide/sandboxes/#remote-sandboxes) and [Sandbox Connector API](/docs/api/sandbox-api/).
+See [Sandboxes](/docs/guide/sandboxes/#remote-sandboxes) and [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md).

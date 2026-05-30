@@ -1,6 +1,7 @@
 ---
 title: smolvm
 description: Run Flue sandbox work in a local libkrun-backed virtual machine.
+lastReviewedAt: 2026-05-30
 ---
 
 The smolvm connector adapts an initialized `Machine` from `smolvm-embedded` into Flue's sandbox interface. Unlike a hosted sandbox service, smolvm runs locally through a host hypervisor.
@@ -26,4 +27,4 @@ Use smolvm for trusted desktop, CI, or server environments where local microVM e
 
 The connector recipe treats networking and machine lifetime as explicit choices. Do not assume a local VM has network access or that it will be cleaned up without your application doing so.
 
-See [Deploy on Node.js](/docs/ecosystem/deploy/node/), [Sandboxes](/docs/guide/sandboxes/), and [Sandbox Connector API](/docs/api/sandbox-api/).
+See [Deploy on Node.js](/docs/ecosystem/deploy/node/), [Sandboxes](/docs/guide/sandboxes/), and [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md).

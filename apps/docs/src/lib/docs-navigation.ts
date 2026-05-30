@@ -65,7 +65,6 @@ export const docsSections: DocsSection[] = [
 					{ title: 'Configuration', slug: 'reference/configuration' },
 					{ title: 'Agent API', slug: 'api/agent-api' },
 					{ title: 'Workflows API', slug: 'api/workflows-api' },
-					{ title: 'Harness API', slug: 'api/harness-api' },
 					{ title: 'Application API', slug: 'api/application-api' },
 					{ title: 'Events Reference', slug: 'api/events-reference' },
 				],
@@ -73,7 +72,10 @@ export const docsSections: DocsSection[] = [
 			{
 				title: 'Advanced',
 				items: [
-					{ title: 'Sandbox Connector API', slug: 'api/sandbox-api' },
+					{
+						title: 'Sandbox Connector API',
+						href: 'https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md',
+					},
 					{ title: 'Data Persistence API', slug: 'api/data-persistence-api' },
 				],
 			},
@@ -90,6 +92,7 @@ export const docsSections: DocsSection[] = [
 					{ title: 'Overview', slug: 'cli/overview' },
 					{ title: 'init', slug: 'cli/init' },
 					{ title: 'dev', slug: 'cli/dev' },
+					{ title: 'connect', slug: 'cli/connect' },
 					{ title: 'run', slug: 'cli/run' },
 					{ title: 'build', slug: 'cli/build' },
 					{ title: 'logs', slug: 'cli/logs' },
@@ -104,36 +107,8 @@ export const docsSections: DocsSection[] = [
 		landingSlug: 'sdk/overview',
 		groups: [
 			{
-				title: 'Introduction',
-				items: [{ title: 'Overview', slug: 'sdk/overview' }],
-			},
-			{
-				title: 'Client',
-				items: [
-					{ title: 'createFlueClient()', slug: 'sdk/create-flue-client' },
-					{ title: 'client.agents.invoke()', slug: 'sdk/client-agents-invoke' },
-					{ title: 'client.agents.connect()', slug: 'sdk/client-agents-connect' },
-					{ title: 'client.workflows.connect()', slug: 'sdk/client-workflows-connect' },
-					{ title: 'client.runs.get()', slug: 'sdk/client-runs-get' },
-					{ title: 'client.runs.events()', slug: 'sdk/client-runs-events' },
-					{ title: 'client.runs.stream()', slug: 'sdk/client-runs-stream' },
-				],
-			},
-			{
-				title: 'Admin',
-				items: [
-					{ title: 'client.admin.agents.list()', slug: 'sdk/client-admin-agents-list' },
-					{ title: 'client.admin.runs.list()', slug: 'sdk/client-admin-runs-list' },
-					{ title: 'client.admin.runs.get()', slug: 'sdk/client-admin-runs-get' },
-				],
-			},
-			{
-				title: 'Reference',
-				items: [
-					{ title: 'WebSocket Types', slug: 'sdk/websocket-types' },
-					{ title: 'Event Types', slug: 'sdk/event-types' },
-					{ title: 'Error Types', slug: 'sdk/error-types' },
-				],
+				title: 'SDK',
+				items: [{ title: 'SDK API', slug: 'sdk/overview' }],
 			},
 		],
 	},

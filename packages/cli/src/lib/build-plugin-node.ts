@@ -324,7 +324,7 @@ if (isLocalCliMode) {
 } else {
   const port = parseInt(process.env.PORT || '3000', 10);
   const server = serve({
-    fetch: app.fetch,
+    fetch: (request, env) => app.fetch(request, env),
     websocket: { server: websocketTransport.server },
     port,
     serverOptions: { requestTimeout: 0 },

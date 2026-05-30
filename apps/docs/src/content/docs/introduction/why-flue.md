@@ -19,7 +19,7 @@ Some highlights include:
 - **[Subagents](/docs/guide/subagents/):** Delegate specialized tasks to the right expert.
 - **[Tools](/docs/guide/tools/):** Typed actions for calling APIs and changing data.
 - **[Skills](/docs/guide/skills/):** Reusable expertise agents load on demand.
-- **[MCP Servers](/docs/guide/tools/#connect-mcp-tools):** Connect tools and services over the open MCP ecosystem.
+- **[MCP Servers](/docs/guide/tools/#connect-mcp-servers):** Connect tools and services over the open MCP ecosystem.
 - **[Observability](/docs/guide/observability/):** Export traces to OpenTelemetry, Braintrust, Sentry, and more.
 - **[Chat](/docs/guide/chat/):** Reach agents from Slack, Teams, Discord, and GitHub.
 

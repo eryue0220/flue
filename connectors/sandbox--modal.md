@@ -33,11 +33,8 @@ A few things worth knowing about Modal that shape this connector:
 
 ## Where to write the file
 
-Pick the location based on the user's source layout (analogous to Next.js's
-`src/` folder):
-
-- **If `<root>/.flue/` exists**, write to `./.flue/connectors/modal.ts`.
-- **Otherwise**, write to `./connectors/modal.ts` at the project root.
+Select the first existing source directory: `<root>/.flue/`, then `<root>/src/`,
+then `<root>/`. Write the connector to `<source-dir>/connectors/modal.ts`.
 
 If neither feels right (uncommon layout, multiple workspaces, etc.), ask the
 user before writing.

@@ -161,7 +161,7 @@ export async function run({ init, payload }: FlueContext<{ ticket: string }>) {
 }
 ```
 
-Use structured results when later application code depends on specific fields, instead of parsing a textual answer. See the [Harness API](/docs/api/harness-api/) for result errors, operation options, and response types.
+Use structured results when later application code depends on specific fields, instead of parsing a textual answer. See the [Agent API](/docs/api/agent-api/) for result errors, operation options, and response types.
 
 ## Managing workflow runs
 
@@ -185,7 +185,7 @@ For event contents, structured logging, filtering, and telemetry export, see [Ob
 ## Next steps
 
 - [Agents](/docs/guide/building-agents/) — create and configure continuing agent instances.
-- [Harness API](/docs/api/harness-api/) — look up session operations, structured results, and workspace methods.
+- [Agent API](/docs/api/agent-api/) — look up session operations, structured results, and workspace methods.
 - [Tools](/docs/guide/tools/), [Skills](/docs/guide/skills/), and [Sandboxes](/docs/guide/sandboxes/) — configure what the agent in a workflow can do and where it works.
 - [Routing](/docs/guide/routing/) — expose workflows over HTTP or WebSockets and protect their endpoints.
 - [Observability](/docs/guide/observability/) — inspect run events and connect execution to monitoring and tracing tools.

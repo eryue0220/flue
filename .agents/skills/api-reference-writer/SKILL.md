@@ -191,7 +191,7 @@ After editing:
 Use editorial grouping only where it improves lookup. Good grouping examples:
 
 - configuration fields under one authored config interface;
-- harness, sessions, and session operations on one Harness API page;
+- agents, profiles, harnesses, sessions, and session operations on one Agent API page;
 - application composition functions under `@flue/runtime/app`;
 - observable event unions and errors on an Events Reference page.
 

@@ -8,12 +8,9 @@ This guide focuses on deploying the generated Node server. For the message-drive
 
 ## Project layout
 
-The project root is your project directory. Source files (agents, workflows, and any other code they import) live in one of two places, analogous to Next.js's `src/` folder:
+The project root is your project directory. Flue selects authored source from `.flue/`, then `src/`, then the project root. The first matching directory wins, and layouts never mix.
 
-- `./agents/` and `./workflows/` — bare layout, source at the project root.
-- `./.flue/agents/` and `./.flue/workflows/` — `.flue/` source layout. When you opt into this, treat `.flue/` as the home for everything agent-related (connectors, session stores, helpers, …).
-
-If `./.flue/` exists, Flue reads sources from there; otherwise it reads from the project root. The two layouts never mix. By default `flue build` writes to `./dist/` at the project root; pass `--output <path>` to redirect the build elsewhere. Examples in this guide use the `./.flue/` layout — drop the prefix if you prefer the bare layout.
+By default `flue build` writes to `./dist/` at the project root; pass `--output <path>` to redirect the build elsewhere. Examples in this guide use the `./.flue/` layout.
 
 ## Hello World
 

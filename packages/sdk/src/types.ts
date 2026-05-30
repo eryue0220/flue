@@ -1,7 +1,9 @@
 export type RunStatus = 'active' | 'completed' | 'errored';
 
+/** Workflow identity recorded for a run. Direct agent interactions are not runs. */
 export type RunOwner = { kind: 'workflow'; workflowName: string; instanceId: string };
 
+/** Persisted workflow-run record. */
 export interface RunRecord {
 	runId: string;
 	owner: RunOwner;
@@ -12,10 +14,12 @@ export interface RunRecord {
 	endedAt?: string;
 	isError?: boolean;
 	durationMs?: number;
+	payload?: unknown;
 	result?: unknown;
 	error?: unknown;
 }
 
+/** Workflow-run summary returned by admin listing routes. */
 export interface RunPointer {
 	runId: string;
 	owner: RunOwner;
@@ -26,17 +30,21 @@ export interface RunPointer {
 	isError?: boolean;
 }
 
+/** Agent discovery metadata returned by the read-only admin route. */
 export interface AgentManifestEntry {
 	name: string;
 	transports: { http?: true; websocket?: true };
 	created: boolean;
 }
 
+/** Payload for a direct interaction with a persistent agent instance. */
 export interface DirectAgentPayload {
 	message: string;
+	/** Session name. Defaults to `default`. */
 	session?: string;
 }
 
+/** Cursor-paginated list response. */
 export interface ListResponse<T> {
 	items: T[];
 	nextCursor?: string;
@@ -59,12 +67,14 @@ interface PromptUsage {
 
 type OperationKind = 'prompt' | 'skill' | 'task' | 'shell' | 'compact';
 
+/** Normalized text content emitted with model-turn events. */
 export type LlmTextContent = {
 	type: 'text';
 	text: string;
 	textSignature?: string;
 };
 
+/** Normalized reasoning content emitted with model-turn events. */
 export type LlmThinkingContent = {
 	type: 'thinking';
 	thinking: string;
@@ -72,12 +82,14 @@ export type LlmThinkingContent = {
 	redacted?: boolean;
 };
 
+/** Normalized image content emitted with model-turn events. */
 export type LlmImageContent = {
 	type: 'image';
 	data: string;
 	mimeType: string;
 };
 
+/** Normalized tool call emitted with model-turn events. */
 export type LlmToolCall = {
 	type: 'toolCall';
 	id: string;
@@ -86,16 +98,19 @@ export type LlmToolCall = {
 	thoughtSignature?: string;
 };
 
+/** Normalized user message emitted with model-turn events. */
 export type LlmUserMessage = {
 	role: 'user';
 	content: string | (LlmTextContent | LlmImageContent)[];
 };
 
+/** Normalized assistant message emitted with model-turn events. */
 export type LlmAssistantMessage = {
 	role: 'assistant';
 	content: (LlmTextContent | LlmThinkingContent | LlmToolCall)[];
 };
 
+/** Normalized tool-result message emitted with model-turn events. */
 export type LlmToolResultMessage = {
 	role: 'toolResult';
 	toolCallId: string;
@@ -104,16 +119,20 @@ export type LlmToolResultMessage = {
 	isError: boolean;
 };
 
+/** Normalized model message emitted with model-turn events. */
 export type LlmMessage = LlmUserMessage | LlmAssistantMessage | LlmToolResultMessage;
 
+/** Normalized tool definition emitted with model-turn events. */
 export type LlmTool = {
 	name: string;
 	description: string;
 	parameters: unknown;
 };
 
+/** Purpose of a model turn emitted with model-turn events. */
 export type LlmTurnPurpose = 'agent' | 'compaction' | 'compaction_prefix';
 
+/** Structured server error data. */
 export interface FluePublicError {
 	type: string;
 	message: string;
@@ -122,6 +141,7 @@ export interface FluePublicError {
 	meta?: Record<string, unknown>;
 }
 
+/** Low-level protocol messages sent over an agent WebSocket. */
 export type AgentWebSocketClientMessage =
 	| {
 			version: 1;
@@ -136,6 +156,7 @@ export type AgentWebSocketClientMessage =
 			requestId?: string;
 	  };
 
+/** Low-level protocol message sent over a workflow WebSocket. */
 export interface WorkflowWebSocketClientMessage {
 	version: 1;
 	type: 'invoke';
@@ -143,6 +164,7 @@ export interface WorkflowWebSocketClientMessage {
 	payload?: unknown;
 }
 
+/** Low-level structured WebSocket error message. */
 export type WebSocketErrorMessage = {
 	version: 1;
 	type: 'error';
@@ -150,6 +172,7 @@ export type WebSocketErrorMessage = {
 	error: FluePublicError;
 };
 
+/** Low-level protocol messages received from an agent WebSocket. */
 export type AgentWebSocketServerMessage =
 	| {
 			version: 1;
@@ -182,6 +205,7 @@ export type AgentWebSocketServerMessage =
 			requestId?: string;
 	  };
 
+/** Low-level protocol messages received from a workflow WebSocket. */
 export type WorkflowWebSocketServerMessage =
 	| {
 			version: 1;
@@ -218,8 +242,10 @@ export type WorkflowWebSocketServerMessage =
 			error: FluePublicError;
 	  };
 
+/** Low-level protocol message received from an agent or workflow WebSocket. */
 export type WebSocketServerMessage = AgentWebSocketServerMessage | WorkflowWebSocketServerMessage;
 
+/** Observable workflow-run event. */
 export type FlueEvent = (
 	| {
 			type: 'run_start';
@@ -280,11 +306,13 @@ export type FlueEvent = (
 	turnId?: string;
 };
 
+/** Direct-agent event attached to an agent instance rather than a workflow run. */
 export type AttachedAgentEvent = Exclude<FlueEvent, { type: 'run_start' } | { type: 'run_resume' } | { type: 'run_end' }> & {
 	runId?: never;
 	instanceId: string;
 };
 
+/** Structured error envelope received while streaming a direct agent interaction. Streams throw the error message rather than yielding this envelope. */
 export interface AttachedAgentStreamError {
 	type: 'error';
 	instanceId: string;

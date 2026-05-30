@@ -6,12 +6,9 @@ By the end, you will have a Flue agent running on Cloudflare Workers, and you wi
 
 ## Project layout
 
-The project root is your project directory. Source files (workflows, agents, and any other code they import) live in one of two places, analogous to Next.js's `src/` folder:
+The project root is your project directory. Flue selects authored source from `.flue/`, then `src/`, then the project root. The first matching directory wins, and layouts never mix.
 
-- `./workflows/` and `./agents/` — bare layout, source at the project root.
-- `./.flue/workflows/` and `./.flue/agents/` — `.flue/` source layout. When you opt into this, treat `.flue/` as the home for everything agent-related (connectors, session stores, helpers, …).
-
-If `./.flue/` exists, Flue reads sources from there; otherwise it reads from the project root. The two layouts never mix. By default `flue build` writes to `./dist/` at the project root; pass `--output <path>` to redirect the build elsewhere. `wrangler.jsonc` and any `Dockerfile` you ship live at the project root, regardless of where the build lands. Examples in this guide use the `./.flue/` layout — drop the prefix if you prefer the bare layout.
+By default `flue build` writes to `./dist/` at the project root; pass `--output <path>` to redirect the build elsewhere. `wrangler.jsonc` and any `Dockerfile` you ship live at the project root, regardless of where the build lands. Examples in this guide use the `./.flue/` layout.
 
 ## Hello World
 

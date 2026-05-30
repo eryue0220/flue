@@ -1,61 +1,45 @@
 /**
- * Public surface for user-authored `app.ts` entries.
+ * Runtime-safe application composition APIs for an optional authored `app.ts`
+ * entrypoint.
  *
- * Runtime-safe imports for user-authored app entries. Keep this subpath free
- * of build-only dependencies; `app.ts` may be bundled for Workers.
+ * Without `app.ts`, Flue generates an application that mounts {@link flue} at
+ * `/`. When `app.ts` exists, its default {@link Fetchable} export owns the
+ * request pipeline and must mount {@link flue} explicitly to publish Flue
+ * routes. Mount {@link admin} explicitly when the application needs protected
+ * deployment inspection routes.
  *
- *     import {
- *       flue,
- *       registerProvider,
- *       configureProvider,
- *       type Fetchable,
- *     } from '@flue/runtime/app';
- *     import { Hono } from 'hono';
+ * ```ts
+ * import { flue } from '@flue/runtime/app';
+ * import { Hono } from 'hono';
  *
- *     registerProvider('my-anthropic', {
- *       api: 'openai-completions',
- *       baseUrl: 'https://api.anthropic.com/v1',
- *       apiKey: process.env.ANTHROPIC_API_KEY,
- *     });
- *
- *     configureProvider('anthropic', {
- *       baseUrl: process.env.ANTHROPIC_BASE_URL,
- *       apiKey: process.env.ANTHROPIC_API_KEY,
- *     });
- *
- *     const app = new Hono();
- *     app.use('*', logger());
- *     app.route('/', flue());
- *     export default app;
- *
+ * const app = new Hono();
+ * app.route('/', flue());
+ * export default app;
+ * ```
  */
-export { flue } from './runtime/flue-app.ts';
 export { admin } from './runtime/admin-app.ts';
+export { type FlueEventSubscriber, observe } from './runtime/events.ts';
+export { flue } from './runtime/flue-app.ts';
 export {
-	registerProvider,
-	registerApiProvider,
-	configureProvider,
-	type ProviderRegistration,
-	type ProviderConfiguration,
-	type HttpProviderRegistration,
-	type CloudflareAIBindingRegistration,
 	type CloudflareAIBinding,
+	type CloudflareAIBindingRegistration,
+	configureProvider,
+	type HttpProviderRegistration,
+	type ProviderConfiguration,
+	type ProviderRegistration,
+	registerApiProvider,
+	registerProvider,
 } from './runtime/providers.ts';
-export { observe, type FlueEventSubscriber } from './runtime/events.ts';
 
 /**
- * Shape contract for a user-authored `app.ts` default export. Any
- * object exposing a `fetch(request, env?, ctx?)` method satisfies it,
- * including a `new Hono()` instance.
+ * Structural contract for the default export of an authored `app.ts` entry.
+ * Any object exposing a compatible `fetch()` method satisfies it, including a
+ * `new Hono()` instance.
  *
- * The `env` and `ctx` parameters are passed through on the Cloudflare
- * target (env = bindings, ctx = ExecutionContext); on Node they are
- * undefined.
+ * On Cloudflare, `env` contains bindings and `ctx` is the
+ * `ExecutionContext`. On Node, `env` contains Hono's Node adapter bindings for
+ * the incoming and outgoing messages, and `ctx` is `undefined`.
  */
 export interface Fetchable {
-	fetch(
-		request: Request,
-		env?: unknown,
-		ctx?: unknown,
-	): Response | Promise<Response>;
+	fetch(request: Request, env?: unknown, ctx?: unknown): Response | Promise<Response>;
 }

@@ -71,7 +71,7 @@ export async function run({ init, payload }: FlueContext<{ change: string }>) {
 }
 ```
 
-Here, the workflow chooses `reviewer` rather than leaving delegation to the parent agent. See [Workflows](/docs/guide/workflows/) for workflow orchestration and the [Harness API](/docs/api/harness-api/) for task options and result types.
+Here, the workflow chooses `reviewer` rather than leaving delegation to the parent agent. See [Workflows](/docs/guide/workflows/) for workflow orchestration and the [Agent API](/docs/api/agent-api/) for task options and result types.
 
 ## Next steps
 
@@ -79,5 +79,5 @@ Here, the workflow chooses `reviewer` rather than leaving delegation to the pare
 - [Workflows](/docs/guide/workflows/) — orchestrate finite agent work in application code.
 - [Tools](/docs/guide/tools/) and [Skills](/docs/guide/skills/) — give an agent profile capabilities and reusable instructions.
 - [Sandboxes](/docs/guide/sandboxes/) — control the workspace available during delegated work.
-- [Harness API](/docs/api/harness-api/) — look up `session.task(...)` options and results.
+- [Agent API](/docs/api/agent-api/) — look up `session.task(...)` options and results.
 - [Observability](/docs/guide/observability/) — inspect delegated activity alongside other agent work.

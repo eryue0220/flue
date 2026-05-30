@@ -21,10 +21,8 @@ binding. The user owns workspace construction and hydration.
 
 ## Where to write the file
 
-Pick the location based on the user's source layout:
-
-- **If `<root>/.flue/` exists**, write to `./.flue/connectors/cloudflare-shell.ts`.
-- **Otherwise**, write to `./connectors/cloudflare-shell.ts` at the project root.
+Select the first existing source directory: `<root>/.flue/`, then `<root>/src/`,
+then `<root>/`. Write the connector to `<source-dir>/connectors/cloudflare-shell.ts`.
 
 If neither feels right, ask the user before writing. Create any missing parent
 directories.

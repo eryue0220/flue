@@ -20,11 +20,8 @@ the Daytona client lifecycle; this connector just adapts the sandbox.
 
 ## Where to write the file
 
-Pick the location based on the user's source layout (analogous to Next.js's
-`src/` folder):
-
-- **If `<root>/.flue/` exists**, write to `./.flue/connectors/daytona.ts`.
-- **Otherwise**, write to `./connectors/daytona.ts` at the project root.
+Select the first existing source directory: `<root>/.flue/`, then `<root>/src/`,
+then `<root>/`. Write the connector to `<source-dir>/connectors/daytona.ts`.
 
 If neither feels right (uncommon layout, multiple workspaces, etc.), ask the
 user before writing.

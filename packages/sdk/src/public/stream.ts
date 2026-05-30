@@ -1,10 +1,15 @@
 import type { HttpClient } from '../http.ts';
 import type { FlueEvent } from '../types.ts';
 
+/** Options for streaming workflow-run events over server-sent events. */
 export interface StreamOptions {
+	/** Resume after this event index. */
 	lastEventId?: number;
+	/** Stop consuming events when aborted. */
 	signal?: AbortSignal;
+	/** Maximum reconnection attempts after an interrupted stream. Defaults to `3`. */
 	maxRetries?: number;
+	/** Initial reconnection delay in milliseconds. Defaults to `250`. */
 	initialRetryMs?: number;
 }
 
@@ -46,7 +51,14 @@ export async function* streamRunEvents(
 					const parsed = Number.parseInt(frame.id, 10);
 					if (Number.isFinite(parsed)) lastEventId = parsed;
 				}
-				const event = JSON.parse(frame.data) as FlueEvent;
+				const data = JSON.parse(frame.data) as FlueEvent | { message?: unknown };
+				if (frame.event === 'error') {
+					const message = typeof data === 'object' && data !== null && 'message' in data
+						? data.message
+						: undefined;
+					throw new Error(typeof message === 'string' ? message : 'SSE stream failed.');
+				}
+				const event = data as FlueEvent;
 				yield event;
 				if (event.type === 'run_end') {
 					sawTerminalEvent = true;

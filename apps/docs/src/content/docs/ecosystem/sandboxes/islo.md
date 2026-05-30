@@ -1,6 +1,7 @@
 ---
 title: islo
 description: Connect a Node-target Flue application to a named islo sandbox through its CLI.
+lastReviewedAt: 2026-05-30
 ---
 
 The islo connector adapts a named islo sandbox into Flue's sandbox interface by invoking the local `islo` CLI. It is designed for a Node.js server, container, or CI runner where the binary is installed and can launch remote commands.
@@ -26,4 +27,4 @@ Use islo when an application can rely on a host-installed CLI and wants to conne
 
 The connector runs remote shell/file work through the CLI; ensure its host process, credentials, and agent inputs match your intended trust boundary.
 
-See [Deploy on Node.js](/docs/ecosystem/deploy/node/), [Sandboxes](/docs/guide/sandboxes/), and [Sandbox Connector API](/docs/api/sandbox-api/).
+See [Deploy on Node.js](/docs/ecosystem/deploy/node/), [Sandboxes](/docs/guide/sandboxes/), and [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md).

@@ -24,11 +24,8 @@ which makes it a good fit for per-session agents that want a real OS.
 
 ## Where to write the file
 
-Pick the location based on the user's source layout (analogous to Next.js's
-`src/` folder):
-
-- **If `<root>/.flue/` exists**, write to `./.flue/connectors/boxd.ts`.
-- **Otherwise**, write to `./connectors/boxd.ts` at the project root.
+Select the first existing source directory: `<root>/.flue/`, then `<root>/src/`,
+then `<root>/`. Write the connector to `<source-dir>/connectors/boxd.ts`.
 
 If neither feels right (uncommon layout, multiple workspaces, etc.), ask the
 user before writing.

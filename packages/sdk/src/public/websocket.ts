@@ -9,60 +9,85 @@ import type {
 	WorkflowWebSocketServerMessage,
 } from '../types.ts';
 
+/** Minimal socket interface required by the client SDK. */
 export interface WebSocketLike {
 	addEventListener(type: 'message' | 'close' | 'error', listener: (event: unknown) => void): void;
 	send(data: string): void;
 	close(code?: number, reason?: string): void;
 }
 
+/** Creates a socket for a fully resolved WebSocket URL. */
 export type WebSocketFactory = (url: string) => WebSocketLike;
 
+/** Identifies the route that a WebSocket URL will connect to. */
 export type WebSocketTarget =
 	| { target: 'agent'; name: string; instanceId: string }
 	| { target: 'workflow'; name: string };
 
+/** Transforms a WebSocket URL before connection, for example to add handshake authentication. */
 export type WebSocketUrlTransform = (url: URL, target: WebSocketTarget) => URL | string;
 
+/** Terminal result from an agent-socket prompt. */
 export interface AgentSocketInvokeResult {
 	result: unknown;
 }
 
+/** Terminal result and run identity from a workflow-socket invocation. */
 export interface WorkflowSocketInvokeResult {
 	result: unknown;
 	runId: string;
 }
 
+/** Terminal result from an agent or workflow socket invocation. */
 export type SocketInvokeResult = AgentSocketInvokeResult | WorkflowSocketInvokeResult;
 
+/** Correlation metadata for an agent-socket event. */
 export interface AgentSocketEventContext {
 	requestId: string;
 }
 
+/** Correlation metadata for a workflow-socket event. */
 export interface WorkflowSocketEventContext {
 	requestId: string;
 	runId: string;
 }
 
+/** Correlation metadata for an agent or workflow socket event. */
 export type SocketEventContext = AgentSocketEventContext | WorkflowSocketEventContext;
+/** Receives direct-agent events and their prompt correlation metadata. */
 export type AgentSocketEventListener = (event: AttachedAgentEvent, context: AgentSocketEventContext) => void;
+/** Receives workflow-run events and their invocation correlation metadata. */
 export type WorkflowSocketEventListener = (event: FlueEvent, context: WorkflowSocketEventContext) => void;
+/** Event listener accepted by an agent or workflow socket. */
 export type SocketEventListener = AgentSocketEventListener | WorkflowSocketEventListener;
 
+/** Reusable WebSocket connection to one persistent agent instance. */
 export interface AgentSocket {
+	/** Resolves after the server accepts the connection. */
 	readonly ready: Promise<void>;
+	/** Sends a prompt to the connected agent instance. Sequential prompts may reuse the connection. */
 	prompt(message: string, options?: { session?: string }): Promise<AgentSocketInvokeResult>;
+	/** Checks the connection with a protocol ping. */
 	ping(): Promise<void>;
+	/** Subscribes to prompt events. Returns an unsubscribe function. */
 	onEvent(listener: AgentSocketEventListener): () => void;
+	/** Closes the connection and rejects pending work. */
 	close(code?: number, reason?: string): void;
 }
 
+/** WebSocket connection for one workflow invocation. */
 export interface WorkflowSocket {
+	/** Resolves after the server accepts the connection. */
 	readonly ready: Promise<void>;
+	/** Starts the workflow. A workflow socket accepts only one invocation. */
 	invoke(payload?: unknown): Promise<WorkflowSocketInvokeResult>;
+	/** Subscribes to workflow-run events. Returns an unsubscribe function. */
 	onEvent(listener: WorkflowSocketEventListener): () => void;
+	/** Closes the connection and rejects pending work. */
 	close(code?: number, reason?: string): void;
 }
 
+/** Structured server error received over a WebSocket connection. */
 export class FlueSocketError extends Error {
 	readonly error: FluePublicError;
 	readonly requestId: string | undefined;

@@ -33,11 +33,8 @@ for current status.
 
 ## Where to write the file
 
-Pick the location based on the user's project layout:
-
-- **`.flue/` layout** (project has files at the root and uses `.flue/workflows/` or `.flue/agents/` etc.): write to `./.flue/connectors/smolvm.ts`.
-- **Root layout** (the project root itself contains `workflows/`, `agents/`, and friends):
-  write to `./connectors/smolvm.ts`.
+Select the first existing source directory: `<root>/.flue/`, then `<root>/src/`,
+then `<root>/`. Write the connector to `<source-dir>/connectors/smolvm.ts`.
 
 If neither feels right (uncommon layout, multiple workspaces, etc.), ask the
 user before writing.

@@ -152,6 +152,34 @@ describe('createFlueClient', () => {
 		expect(new URL(url).pathname).toBe('/internal/admin/agents');
 	});
 
+	it('rejects run-stream SSE error frames instead of yielding them as events', async () => {
+		const client = createFlueClient({
+			baseUrl: 'https://flue.test',
+			fetch: async () => new Response(sse('event: error\nid: 1\ndata: {"message":"stream failed"}\n\n'), {
+				headers: { 'content-type': 'text/event-stream' },
+			}),
+		});
+		const events: unknown[] = [];
+		await expect((async () => {
+			for await (const event of client.runs.stream('run_1', { maxRetries: 0 })) events.push(event);
+		})()).rejects.toThrow('stream failed');
+		expect(events).toEqual([]);
+	});
+
+	it('uses a fallback error for run-stream SSE error frames without messages', async () => {
+		for (const data of ['null', '{}']) {
+			const client = createFlueClient({
+				baseUrl: 'https://flue.test',
+				fetch: async () => new Response(sse(`event: error\nid: 1\ndata: ${data}\n\n`), {
+					headers: { 'content-type': 'text/event-stream' },
+				}),
+			});
+			await expect((async () => {
+				for await (const _event of client.runs.stream('run_1', { maxRetries: 0 })) return;
+			})()).rejects.toThrow('SSE stream failed.');
+		}
+	});
+
 	it('reconnects run streams after clean EOF before run_end', async () => {
 		const requests: Request[] = [];
 		const client = createFlueClient({

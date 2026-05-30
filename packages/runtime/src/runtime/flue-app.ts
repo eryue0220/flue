@@ -209,7 +209,22 @@ export function getFlueRuntime(): FlueRuntime | undefined {
 }
 
 /**
- * Importable from `@flue/runtime/app`.
+ * Creates a mountable Hono sub-app for Flue's public HTTP and WebSocket API.
+ * Routes are relative to the application-chosen mount prefix.
+ *
+ * The mounted sub-app exposes:
+ *
+ * - `GET /openapi.json`
+ * - `POST /agents/:name/:id` and `GET /agents/:name/:id` WebSocket upgrades
+ * - `POST /workflows/:name` and `GET /workflows/:name` WebSocket upgrades
+ * - `GET /runs/:runId`
+ * - `GET /runs/:runId/events`
+ * - `GET /runs/:runId/stream`
+ *
+ * Agent and workflow routes are available only when the corresponding module
+ * opts into that transport. Run routes inspect workflow runs only and may
+ * expose payloads, results, errors, and events; applications publishing them
+ * should authorize access to the selected run.
  */
 export function flue(): Hono {
 	const app = new Hono();

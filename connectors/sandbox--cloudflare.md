@@ -203,10 +203,9 @@ without first confirming the basics work on `--target cloudflare`.
 
 ## Hard rules
 
-- **Do not** create a `./.flue/connectors/cloudflare.ts` or
-  `./connectors/cloudflare.ts` file. There is no factory function to
-  install — Flue's SDK adapts `@cloudflare/sandbox` internally on the
-  Cloudflare target.
+- **Do not** create a `connectors/cloudflare.ts` file under any source
+  directory. There is no factory function to install — Flue's SDK adapts
+  `@cloudflare/sandbox` internally on the Cloudflare target.
 - **Do not** silently migrate a Node-target project to Cloudflare. Always
   confirm first.
 - **Do not** invent a Cloudflare account, API token, or `account_id`. The

@@ -99,7 +99,7 @@ export async function run({ init, payload }: FlueContext<{ change: string }>) {
 
 `args` provides input for this invocation of the skill. The `result` schema makes `response.data` a validated structured result; omit it when you want text output from `response.text`. The string passed to `session.skill(...)` is the declared skill name, not a path to `SKILL.md`.
 
-See the [Harness API](/docs/api/harness-api/) for operation options and response types.
+See the [Agent API](/docs/api/agent-api/) for operation options and response types.
 
 ## Next steps
 
@@ -107,4 +107,4 @@ See the [Harness API](/docs/api/harness-api/) for operation options and response
 - [Agents](/docs/guide/building-agents/) — configure an agent's model and capabilities.
 - [Tools](/docs/guide/tools/) — add executable capabilities that a skill may direct an agent to use.
 - [Sandboxes](/docs/guide/sandboxes/) — control the runtime workspace where discovered skills and their files are available.
-- [Harness API](/docs/api/harness-api/) — look up session operation options and result types.
+- [Agent API](/docs/api/agent-api/) — look up session operation options and result types.

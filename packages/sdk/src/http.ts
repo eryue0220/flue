@@ -1,9 +1,14 @@
+/** Static headers or a function that resolves headers for each HTTP request. */
 export type RequestHeaders = Record<string, string> | (() => Record<string, string> | Promise<Record<string, string>>);
 
 export interface HttpClientOptions {
+	/** Origin serving deployed Flue application routes. HTTP routes resolve from its root path. */
 	baseUrl: string;
+	/** Custom HTTP implementation. Defaults to the global `fetch`. */
 	fetch?: typeof fetch;
+	/** Headers merged into each HTTP request. */
 	headers?: RequestHeaders;
+	/** Bearer token added to HTTP requests. */
 	token?: string;
 }
 

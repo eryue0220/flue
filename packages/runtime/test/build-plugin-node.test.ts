@@ -246,6 +246,32 @@ describe('Node build plugin', () => {
 		}
 	});
 
+	it('preserves authored app fetch receivers and forwards Node bindings', async () => {
+		const root = createFixtureRoot('flue-custom-fetch-app-');
+		fs.mkdirSync(path.join(root, 'workflows'));
+		fs.writeFileSync(path.join(root, 'workflows', 'unused.ts'), `export async function run() { return null; }\n`);
+		fs.writeFileSync(
+			path.join(root, 'app.ts'),
+			`const app = {\n` +
+				`  prefix: 'bound',\n` +
+				`  fetch(_request: Request, env?: { incoming?: unknown; outgoing?: unknown }) {\n` +
+				`    return Response.json({ prefix: this.prefix, hasIncoming: !!env?.incoming, hasOutgoing: !!env?.outgoing });\n` +
+				`  },\n` +
+				`};\n` +
+				`export default app;\n`,
+		);
+		await build({ root, sourceRoot: root, target: 'node' });
+
+		const { child, port } = await startGeneratedServer(root);
+		try {
+			const response = await fetch(`http://localhost:${port}/`);
+			expect(response.status).toBe(200);
+			expect(await response.json()).toEqual({ prefix: 'bound', hasIncoming: true, hasOutgoing: true });
+		} finally {
+			child.kill('SIGTERM');
+		}
+	});
+
 	it('invokes a WebSocket-exported workflow without exposing HTTP POST', async () => {
 		const root = createFixtureRoot('flue-exported-websocket-workflow-');
 		fs.mkdirSync(path.join(root, 'workflows'));

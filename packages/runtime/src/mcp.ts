@@ -3,25 +3,45 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolDefinition, ToolParameters } from './types.ts';
 
+/** Remote MCP transport. */
 export type McpTransport = 'streamable-http' | 'sse';
 
+/** Options for {@link connectMcpServer}. */
 export interface McpServerOptions {
+	/** MCP server endpoint. */
 	url: string | URL;
-	/** Defaults to modern streamable HTTP. Use 'sse' for legacy MCP servers. */
+	/** Defaults to modern streamable HTTP. Use `'sse'` for legacy MCP servers. */
 	transport?: McpTransport;
+	/** Headers merged into MCP transport requests. */
 	headers?: HeadersInit;
+	/** Additional MCP transport request configuration. */
 	requestInit?: RequestInit;
+	/** Custom fetch implementation used by the MCP transport. */
 	fetch?: typeof fetch;
+	/** MCP client name. Defaults to `'flue'`. */
 	clientName?: string;
+	/** MCP client version. Defaults to `'0.0.0'`. */
 	clientVersion?: string;
 }
 
+/** Connection returned by {@link connectMcpServer}. */
 export interface McpServerConnection {
+	/** Server name supplied to {@link connectMcpServer}. */
 	name: string;
+	/** MCP tools adapted into ordinary Flue tool definitions. */
 	tools: ToolDefinition[];
+	/** Close the underlying MCP client connection. */
 	close(): Promise<void>;
 }
 
+/**
+ * Connects to a remote MCP server and adapts its listed tools into ordinary
+ * Flue tool definitions.
+ *
+ * Adapted tool names use `mcp__<server>__<tool>`. Unsupported characters are
+ * replaced with underscores, and duplicate adapted names are rejected. Close
+ * the returned connection when its tools are no longer needed.
+ */
 export async function connectMcpServer(
 	name: string,
 	options: McpServerOptions,
@@ -110,7 +130,10 @@ function createMcpTools(serverName: string, client: Client, tools: Tool[]): Tool
 	});
 }
 
-function mergeRequestInit(requestInit: RequestInit | undefined, headers: HeadersInit | undefined): RequestInit {
+function mergeRequestInit(
+	requestInit: RequestInit | undefined,
+	headers: HeadersInit | undefined,
+): RequestInit {
 	if (!headers) return requestInit ?? {};
 	const mergedHeaders = new Headers(requestInit?.headers);
 	for (const [key, value] of new Headers(headers)) {

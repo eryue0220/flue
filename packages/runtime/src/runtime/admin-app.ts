@@ -1,5 +1,3 @@
-/** Admin Hono sub-app exposing Flue's read-only deployment inspection routes. */
-
 import type { MiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import {
@@ -27,6 +25,18 @@ import {
 	RunRecordSchema,
 } from './schemas.ts';
 
+/**
+ * Creates a mountable Hono sub-app for read-only deployment inspection.
+ * Mount it explicitly beneath an application-chosen prefix and protect that
+ * mount with application-owned authorization.
+ *
+ * The mounted sub-app exposes:
+ *
+ * - `GET /openapi.json`
+ * - `GET /agents`
+ * - `GET /runs`
+ * - `GET /runs/:runId`
+ */
 export function admin(): Hono {
 	const app = new Hono();
 

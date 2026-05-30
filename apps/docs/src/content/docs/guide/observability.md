@@ -38,7 +38,7 @@ export async function run({ init, log, payload }: FlueContext<{ text: string }>)
 
 `log.info(...)`, `log.warn(...)`, and `log.error(...)` accept structured attributes. Use attributes for values that you may later search, aggregate, or forward to a monitoring system.
 
-`flue run` reports the `runId` when it invokes a workflow. During local development or an investigation, use that identifier to inspect the workflow run from the command line:
+When a workflow invoked through a running application reports its `runId`, use that identifier to inspect the workflow run from the command line:
 
 ```bash
 pnpm exec flue logs <runId> --server http://localhost:3583

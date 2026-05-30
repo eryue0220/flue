@@ -1,5 +1,11 @@
 import type { ToolDefinition, ToolParameters } from './types.ts';
 
+/**
+ * Validates a custom model-callable tool and returns a shallow-frozen copy.
+ *
+ * This validates the required definition fields. Tool names are checked for
+ * collisions with other active tools when a session assembles its tool list.
+ */
 export function defineTool<TParams extends ToolParameters>(
 	tool: ToolDefinition<TParams>,
 ): ToolDefinition<TParams> {

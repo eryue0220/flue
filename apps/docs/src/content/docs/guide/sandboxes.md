@@ -1,7 +1,7 @@
 ---
 title: Sandboxes
 description: Give agents a workspace for files and command-driven work.
-lastReviewedAt: 2026-05-29
+lastReviewedAt: 2026-05-30
 ---
 
 Sandboxes give an agent a workspace to read, write, and run commands in while it works. Use them when an agent needs to operate on files or run commands, rather than only respond to prompts or call application-defined [tools](/docs/guide/tools/).
@@ -65,7 +65,7 @@ Use a remote sandbox when agent work needs an environment that should not run on
 
 A remote sandbox is supplied through an integration appropriate to the provider or platform. Your application is responsible for deciding which workspace belongs to which agent instance or workflow, what credentials and network access it receives, whether it may be reused, and when it is deleted or expired.
 
-See the Ecosystem **Sandboxes** integrations, such as [Daytona](/docs/ecosystem/sandboxes/daytona/), to connect a provider-managed remote sandbox. If you need to implement an integration, see the [Sandbox Connector API](/docs/api/sandbox-api/).
+See the Ecosystem **Sandboxes** integrations, such as [Daytona](/docs/ecosystem/sandboxes/daytona/), to connect a provider-managed remote sandbox. If you need to implement an integration, see the [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md).
 
 Cloudflare deployments can use [Cloudflare Sandbox](/docs/ecosystem/sandboxes/cloudflare/) for a native container-backed Linux sandbox. Use it when an agent deployed on Cloudflare needs tools such as git, package installation, or native commands; its setup and lifecycle details belong in the integration guide.
 
@@ -91,5 +91,5 @@ Choose the narrowest sandbox that supports the task. Expanding the environment e
 - [Workflows](/docs/guide/workflows/) — stage files and collect artifacts during finite work.
 - [Tools](/docs/guide/tools/) — expose bounded application actions separately from workspace access.
 - [Skills](/docs/guide/skills/) — bundle procedures or provide workspace-discovered skills.
-- [Sandbox Connector API](/docs/api/sandbox-api/) — implement a provider-backed sandbox integration.
+- [Sandbox Connector API](https://github.com/withastro/flue/blob/main/docs/sandbox-connector-spec.md) — implement a provider-backed sandbox integration.
 - [Daytona](/docs/ecosystem/sandboxes/daytona/) and [Cloudflare Sandbox](/docs/ecosystem/sandboxes/cloudflare/) — configure remote sandbox integrations.

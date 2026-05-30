@@ -235,7 +235,7 @@ Your application chooses the agent instance and session before dispatching the e
 
 ## Next steps
 
-- [Harness API](/docs/api/harness-api/) — look up session operations and their results.
+- [Agent API](/docs/api/agent-api/) — look up session operations and their results.
 - [Tools](/docs/guide/tools/), [Skills](/docs/guide/skills/), and [Sandboxes](/docs/guide/sandboxes/) — configure what an agent can do and where it works.
 - [Subagents](/docs/guide/subagents/) — delegate focused work to specialist profiles.
 - [Routing](/docs/guide/routing/) — expose agent HTTP and WebSocket surfaces inside an authenticated application.

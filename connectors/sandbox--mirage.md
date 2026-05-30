@@ -37,11 +37,8 @@ Things to know before installing:
 
 ## Where to write the file
 
-Pick the location based on the user's project layout:
-
-- **`.flue/` layout** (project has files at the root and uses `.flue/workflows/` or `.flue/agents/` etc.): write to `./.flue/connectors/mirage.ts`.
-- **Root layout** (the project root itself contains `workflows/`, `agents/`, and friends):
-  write to `./connectors/mirage.ts`.
+Select the first existing source directory: `<root>/.flue/`, then `<root>/src/`,
+then `<root>/`. Write the connector to `<source-dir>/connectors/mirage.ts`.
 
 If neither feels right (uncommon layout, multiple workspaces, etc.), ask the
 user before writing.

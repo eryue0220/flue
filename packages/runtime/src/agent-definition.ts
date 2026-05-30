@@ -1,5 +1,13 @@
 import * as v from 'valibot';
-import type { AgentCreateContext, AgentProfile, AgentRuntimeConfig, CreatedAgent, Skill, ThinkingLevel, ToolDefinition } from './types.ts';
+import type {
+	AgentCreateContext,
+	AgentProfile,
+	AgentRuntimeConfig,
+	CreatedAgent,
+	Skill,
+	ThinkingLevel,
+	ToolDefinition,
+} from './types.ts';
 
 const AGENT_PROFILE_FIELDS = new Set([
 	'name',
@@ -42,20 +50,40 @@ const AgentProfileSchema = v.looseObject({
 	compaction: v.optional(v.union([v.literal(false), v.looseObject({})])),
 });
 
+/**
+ * Validates and returns a reusable agent profile. Use profiles as the baseline
+ * for a created agent or as named subagents available to `session.task()`.
+ *
+ * Throws when the profile contains unknown fields, invalid capabilities,
+ * duplicate capability names, or circular subagents.
+ */
 export function defineAgentProfile(profile: AgentProfile): AgentProfile {
 	assertAgentProfile(profile, 'defineAgentProfile()', new WeakSet());
 	return profile;
 }
 
+/**
+ * Creates an agent initializer. Default-export the returned value from an
+ * `agents/<name>.ts` module to define an addressable agent, or pass it to
+ * `ctx.init()` inside a workflow.
+ *
+ * The initializer runs whenever the runtime initializes a harness from the
+ * created agent: when a workflow calls `ctx.init()`, and when the runtime
+ * prepares an addressable agent interaction. Do not treat it as a one-time
+ * constructor for a persistent agent instance id. Return a runtime config
+ * object with `model: '<provider>/<model>'`, `model: false`, or a profile with
+ * its own model field.
+ */
 export function createAgent<TPayload = unknown, TEnv = Record<string, any>>(
-	initialize: (context: AgentCreateContext<TPayload, TEnv>) => AgentRuntimeConfig | Promise<AgentRuntimeConfig>,
+	initialize: (
+		context: AgentCreateContext<TPayload, TEnv>,
+	) => AgentRuntimeConfig | Promise<AgentRuntimeConfig>,
 ): CreatedAgent<TPayload, TEnv> {
 	if (typeof initialize !== 'function') {
 		throw new Error('[flue] createAgent() requires an initializer function.');
 	}
 	return Object.freeze({ __flueCreatedAgent: true as const, initialize });
 }
-
 
 export function assertResolvedAgentProfile(profile: AgentProfile, label: string): AgentProfile {
 	assertAgentProfile(profile, label, new WeakSet());
@@ -73,7 +101,9 @@ export function resolveAgentProfile(options: AgentRuntimeConfig | undefined): Ag
 		skills: mergeArrays(profile?.skills, options?.skills),
 		tools: mergeArrays(profile?.tools, options?.tools),
 		subagents: mergeArrays(profile?.subagents, options?.subagents),
-		thinkingLevel: hasOwn(options, 'thinkingLevel') ? options?.thinkingLevel : profile?.thinkingLevel,
+		thinkingLevel: hasOwn(options, 'thinkingLevel')
+			? options?.thinkingLevel
+			: profile?.thinkingLevel,
 		compaction: hasOwn(options, 'compaction') ? options?.compaction : profile?.compaction,
 	};
 }
@@ -90,7 +120,10 @@ export function extendAgentProfile(
 	};
 }
 
-function hasOwn<T extends object, K extends PropertyKey>(value: T | undefined, key: K): value is T & Record<K, unknown> {
+function hasOwn<T extends object, K extends PropertyKey>(
+	value: T | undefined,
+	key: K,
+): value is T & Record<K, unknown> {
 	return Boolean(value && Object.hasOwn(value, key));
 }
 
@@ -105,7 +138,9 @@ function assertAgentRuntimeConfig(value: AgentRuntimeConfig | undefined): void {
 	}
 	for (const key of Object.keys(value)) {
 		if (!AGENT_RUNTIME_FIELDS.has(key)) {
-			throw new Error(`[flue] createAgent() initializer returned unknown runtime config field "${key}".`);
+			throw new Error(
+				`[flue] createAgent() initializer returned unknown runtime config field "${key}".`,
+			);
 		}
 	}
 	if (value.profile !== undefined) {
@@ -120,7 +155,9 @@ function assertAgentProfile(
 ): asserts value is AgentProfile {
 	const parsed = v.safeParse(AgentProfileSchema, value);
 	if (!parsed.success) {
-		throw new Error(`[flue] ${label} requires a valid agent profile: ${formatIssues(parsed.issues)}.`);
+		throw new Error(
+			`[flue] ${label} requires a valid agent profile: ${formatIssues(parsed.issues)}.`,
+		);
 	}
 
 	const definition = parsed.output as AgentProfile;
@@ -132,7 +169,8 @@ function assertAgentProfile(
 
 	assertKnownFields(definition, label);
 	if (definition.name !== undefined) assertAgentName(definition.name, `${label} name`);
-	if (definition.description !== undefined) assertNonEmptyString(definition.description, `${label} description`);
+	if (definition.description !== undefined)
+		assertNonEmptyString(definition.description, `${label} description`);
 	assertThinkingLevel(definition.thinkingLevel, label);
 	assertCompaction(definition.compaction, label);
 	assertTools(definition.tools, label);
@@ -187,7 +225,10 @@ function assertTokenCount(value: number | undefined, label: string): void {
 	}
 }
 
-function assertTools(values: unknown[] | undefined, label: string): asserts values is ToolDefinition[] | undefined {
+function assertTools(
+	values: unknown[] | undefined,
+	label: string,
+): asserts values is ToolDefinition[] | undefined {
 	for (const [index, value] of values?.entries() ?? []) {
 		if (!value || typeof value !== 'object') {
 			throw new Error(`[flue] ${label} tools[${index}] must be a tool definition object.`);
@@ -204,7 +245,10 @@ function assertTools(values: unknown[] | undefined, label: string): asserts valu
 	}
 }
 
-function assertSkills(values: unknown[] | undefined, label: string): asserts values is Skill[] | undefined {
+function assertSkills(
+	values: unknown[] | undefined,
+	label: string,
+): asserts values is Skill[] | undefined {
 	for (const [index, value] of values?.entries() ?? []) {
 		if (!value || typeof value !== 'object') {
 			throw new Error(`[flue] ${label} skills[${index}] must be a skill definition object.`);
@@ -233,7 +277,9 @@ function assertSubagents(
 function assertAgentName(value: unknown, label: string): asserts value is string {
 	assertNonEmptyString(value, label);
 	if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(value)) {
-		throw new Error(`[flue] ${label} must start with a letter and contain only letters, numbers, "_", or "-".`);
+		throw new Error(
+			`[flue] ${label} must start with a letter and contain only letters, numbers, "_", or "-".`,
+		);
 	}
 }
 

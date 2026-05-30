@@ -1,16 +1,14 @@
 ---
 title: Agent API
-description: Define agents, tools, skills, MCP capabilities, and delegated specialist profiles with the core runtime API.
+description: Reference for defining agents and running agent operations with @flue/runtime.
+lastReviewedAt: 2026-05-30
 ---
 
-The agent-authoring API is exported from `@flue/runtime`. It describes reusable agent configuration and created-agent initializers, plus the capabilities an initialized harness can expose to its sessions.
-
-For task-oriented guidance, see [Agents](/docs/concepts/agents/), [Tools](/docs/guide/tools/), [Skills](/docs/guide/skills/), and [Subagents](/docs/guide/subagents/).
-
-## Imports
+The agent API is exported from `@flue/runtime`.
 
 ```ts
 import {
+  ResultUnavailableError,
   Type,
   connectMcpServer,
   createAgent,
@@ -20,12 +18,35 @@ import {
   type AgentHarnessOptions,
   type AgentProfile,
   type AgentRuntimeConfig,
+  type BashFactory,
+  type CallHandle,
+  type CompactionConfig,
   type CreatedAgent,
+  type FileStat,
+  type FlueContext,
+  type FlueFs,
+  type FlueHarness,
+  type FlueSession,
+  type FlueSessions,
   type McpServerConnection,
   type McpServerOptions,
+  type PromptImage,
+  type PromptModel,
+  type PromptOptions,
+  type PromptResponse,
+  type PromptResultResponse,
+  type PromptUsage,
+  type SandboxFactory,
+  type SessionStore,
+  type ShellOptions,
+  type ShellResult,
   type Skill,
+  type SkillOptions,
   type SkillReference,
+  type TaskOptions,
+  type ThinkingLevel,
   type ToolDefinition,
+  type ToolParameters,
 } from '@flue/runtime';
 ```
 
@@ -35,117 +56,45 @@ import {
 function defineAgentProfile(profile: AgentProfile): AgentProfile;
 ```
 
-Defines reusable agent behavior. A profile may be used as the base configuration for a created agent or declared under `subagents` for delegated task work.
+Validates and returns a reusable agent profile. Use profiles as the baseline for a created agent or as named subagents available to `session.task()`.
+
+Throws when the profile contains unknown fields, invalid capabilities, duplicate capability names, or circular subagents.
+
+#### `AgentProfile`
+
+| Field           | Type                        | Description                                                                    |
+| --------------- | --------------------------- | ------------------------------------------------------------------------------ |
+| `name`          | `string`                    | Profile name. Required when selecting this profile with `session.task()`.      |
+| `model`         | `string \| false`           | Default model specifier. Set to `false` to require call-level model selection. |
+| `instructions`  | `string`                    | Instructions prepended to discovered workspace context.                        |
+| `skills`        | `Skill[]`                   | Registered skills available to initialized sessions.                           |
+| `tools`         | `ToolDefinition[]`          | Custom model-callable tools available to initialized sessions.                 |
+| `subagents`     | `AgentProfile[]`            | Named profiles available for delegated `session.task()` operations.            |
+| `thinkingLevel` | `ThinkingLevel`             | Default reasoning effort. Individual operations may override this value.       |
+| `compaction`    | `false \| CompactionConfig` | Automatic conversation-compaction configuration. `false` disables threshold compaction; overflow recovery and explicit `session.compact()` calls still compact when needed. |
+
+#### `CompactionConfig`
+
+| Field              | Type     | Default                                  | Description                                             |
+| ------------------ | -------- | ---------------------------------------- | ------------------------------------------------------- |
+| `reserveTokens`    | `number` | model-aware; capped at `20000`                | Token headroom reserved before automatic compaction. Smaller model output limits and small context windows reduce this default. |
+| `keepRecentTokens` | `number` | `8000`                                   | Recent tokens preserved unsummarized after compaction.  |
+| `model`            | `string` | session model                            | Model specifier override used for compaction summaries. |
+
+#### `Skill`
 
 ```ts
-const reviewer = defineAgentProfile({
-  name: 'reviewer',
-  description: 'Reviews proposed changes for correctness risks.',
-  model: 'anthropic/claude-sonnet-4-6',
-  thinkingLevel: 'high',
-  instructions: 'Report concrete failure scenarios and file evidence.',
-  tools: [lookupPolicy],
-  skills: [reviewChecklist],
-});
+type Skill =
+  | SkillReference
+  | {
+      name: string;
+      description: string;
+    };
 ```
 
-### `AgentProfile`
+Skill metadata registered with an agent, harness, or profile. Imported `SkillReference` values bundle application-owned skill content. Inline metadata adds only a named catalog entry; it does not package or inject an instruction body. Initialization rejects a registered skill whose name collides with a workspace-discovered skill. See [Skills](/docs/guide/skills/).
 
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `name` | `string` | Optional profile name; required when a profile is selectable as a subagent. |
-| `description` | `string` | Model-facing or application-facing description of the profile role. |
-| `model` | `string \| false` | Default model specifier. `false` deliberately supplies no default model. |
-| `instructions` | `string` | Instructions prepended to discovered workspace context. |
-| `skills` | `Skill[]` | Registered skill definitions or packaged skill references. |
-| `tools` | `ToolDefinition[]` | Custom model-callable tools. |
-| `subagents` | `AgentProfile[]` | Profiles available for nested delegated task selection. |
-| `thinkingLevel` | `ThinkingLevel` | Default requested reasoning effort. |
-| `compaction` | `false \| CompactionConfig` | Conversation compaction behavior. |
-
-Profiles reject unknown fields, invalid reasoning levels, invalid tool/skill/subagent definitions, duplicate capability names within one array, and circular subagent definitions.
-
-## `createAgent(...)`
-
-```ts
-function createAgent<TPayload = unknown, TEnv = Record<string, any>>(
-  initialize: (context: AgentCreateContext<TPayload, TEnv>) =>
-    AgentRuntimeConfig | Promise<AgentRuntimeConfig>,
-): CreatedAgent<TPayload, TEnv>;
-```
-
-Creates a runtime initializer. Default-export it from an `agents/<name>.ts` module to define an addressable agent, or initialize it from a workflow with `ctx.init(agent)`.
-
-```ts
-export default createAgent(({ id, env }) => ({
-  model: 'anthropic/claude-sonnet-4-6',
-  instructions: `Assist the authorized instance ${id}.`,
-  tools: [lookupPolicy],
-  persist: env.SESSION_STORE,
-}));
-```
-
-### `AgentCreateContext`
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `id` | `string` | Addressable agent instance ID for direct/dispatched agent processing; workflow `runId` when initialized within a workflow. |
-| `env` | `TEnv` | Target environment bindings supplied by the runtime. |
-| `payload` | `TPayload \| undefined` | Workflow payload or input initialization payload where available. |
-
-### `AgentRuntimeConfig`
-
-`AgentRuntimeConfig` includes every reusable profile field, plus environment-construction fields:
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `profile` | `AgentProfile` | Reusable baseline whose scalar values can be replaced and arrays extended by created-agent configuration. |
-| `cwd` | `string` | Working directory inside the selected sandbox. |
-| `sandbox` | `false \| SandboxFactory \| BashFactory` | Filesystem and execution boundary for the initialized harness. |
-| `persist` | `SessionStore` | Conversation-state store for sessions initialized from this agent. |
-
-A created agent must establish model intent by returning `model`, `model: false`, or a profile with `model` specified. If no usable default model exists, a model-using operation must supply its own override.
-
-### `CreatedAgent`
-
-```ts
-interface CreatedAgent<TPayload = unknown, TEnv = any> {
-  readonly __flueCreatedAgent: true;
-  readonly initialize: (
-    context: AgentCreateContext<TPayload, TEnv>,
-  ) => AgentRuntimeConfig | Promise<AgentRuntimeConfig>;
-}
-```
-
-Use the value with workflow `init(agent)` or with `dispatch(agent, request)` when it is the discovered default-exported created agent in the built application.
-
-## `AgentHarnessOptions`
-
-Workflow initialization can add capabilities or choose a harness name without changing sandbox or persistence construction:
-
-```ts
-const harness = await init(agent, {
-  name: 'audit',
-  tools: [lookupPolicy],
-  skills: [reviewChecklist],
-  subagents: [reviewer],
-});
-```
-
-```ts
-interface AgentHarnessOptions {
-  name?: string;
-  tools?: ToolDefinition[];
-  skills?: Skill[];
-  subagents?: AgentProfile[];
-}
-```
-
-`init(...)` does not accept `cwd`, `sandbox`, or `persist`; those are returned by `createAgent(...)` because they determine the initialized environment and state boundary.
-
-## Custom tools
-
-### `defineTool(...)`
+## `defineTool(...)`
 
 ```ts
 function defineTool<TParams extends ToolParameters>(
@@ -153,128 +102,53 @@ function defineTool<TParams extends ToolParameters>(
 ): ToolDefinition<TParams>;
 ```
 
-`defineTool(...)` validates a custom model-callable tool and returns a shallow-frozen definition.
+Validates a custom model-callable tool and returns a shallow-frozen copy.
+
+This validates the required definition fields. Tool names are checked for collisions with other active tools when a session assembles its tool list.
+
+#### `ToolDefinition`
+
+| Field         | Type                                                                   | Description                                                            |
+| ------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `name`        | `string`                                                               | Tool name. Must be unique across active built-in and custom tools.     |
+| `description` | `string`                                                               | Tells the model when and how to use this tool.                         |
+| `parameters`  | `ToolParameters`                                                       | JSON Schema-compatible parameter schema.                               |
+| `execute`     | `(args: Record<string, any>, signal?: AbortSignal) => Promise<string>` | Returns text sent back to the model. Thrown errors become tool errors. |
+
+`Type` is re-exported from `@flue/runtime` for constructing JSON Schema-compatible parameters.
 
 ```ts
 const lookupPolicy = defineTool({
   name: 'lookup_policy',
   description: 'Read one approved policy by topic.',
   parameters: Type.Object({ topic: Type.String() }),
-  execute: async ({ topic }, signal) => {
-    return readPolicy(String(topic), signal);
-  },
+  execute: async ({ topic }) => readPolicy(String(topic)),
 });
 ```
 
-### `ToolDefinition`
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `name` | `string` | Non-empty, model-visible tool identifier; must not collide with other active tools. |
-| `description` | `string` | Non-empty model-facing tool guidance. |
-| `parameters` | `ToolParameters` | JSON Schema-compatible argument shape, commonly built with `Type`. |
-| `execute` | `(args: Record<string, any>, signal?: AbortSignal) => Promise<string>` | Trusted implementation; returned text is sent to the model. |
-
-Tool definitions can be attached through a profile, a created agent, `init(agent, { tools })`, or one `prompt()`, `skill()`, or `task()` operation. Tools at narrower scopes are added rather than overriding matching names; duplicate names fail.
-
-`Type` is re-exported from `@flue/runtime` for constructing JSON Schema-compatible parameters. Schema presentation to a model is not an authorization boundary; validate protected identifiers and allowed effects in `execute(...)`.
-
-## Skills
-
-A `Skill` is registered instruction metadata; an imported packaged skill is represented by `SkillReference`.
+## `connectMcpServer(...)`
 
 ```ts
-interface SkillReference {
-  readonly __flueSkillReference: true;
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-}
-
-type Skill =
-  | SkillReference
-  | { name: string; description: string };
+function connectMcpServer(name: string, options: McpServerOptions): Promise<McpServerConnection>;
 ```
 
-Register a statically imported packaged skill in an agent configuration:
+Connects to a remote MCP server and adapts its listed tools into ordinary Flue tool definitions.
 
-```ts
-import review from '../skills/review/SKILL.md' with { type: 'skill' };
+Adapted tool names use `mcp__<server>__<tool>`. Unsupported characters are replaced with underscores, and duplicate adapted names are rejected. Close the returned connection when its tools are no longer needed.
 
-const agent = createAgent(() => ({
-  model: 'anthropic/claude-sonnet-4-6',
-  skills: [review],
-}));
-```
+#### `McpServerOptions`
 
-A harness also discovers workspace skill metadata from `<cwd>/.agents/skills/<name>/SKILL.md` inside its sandbox at initialization time. Declared and discovered skills share one catalog; duplicate names fail rather than selecting one implicitly.
+| Field           | Type                         | Default             | Description                                            |
+| --------------- | ---------------------------- | ------------------- | ------------------------------------------------------ |
+| `url`           | `string \| URL`              | —                   | MCP server endpoint.                                   |
+| `transport`     | `'streamable-http' \| 'sse'` | `'streamable-http'` | Remote MCP transport. Use `'sse'` for legacy servers.  |
+| `headers`       | `HeadersInit`                | —                   | Headers merged into MCP transport requests.            |
+| `requestInit`   | `RequestInit`                | —                   | Additional MCP transport request configuration.        |
+| `fetch`         | `typeof fetch`               | —                   | Custom fetch implementation used by the MCP transport. |
+| `clientName`    | `string`                     | `'flue'`            | MCP client name.                                       |
+| `clientVersion` | `string`                     | `'0.0.0'`           | MCP client version.                                    |
 
-Invoke skills from a session with `session.skill(nameOrReference, options)`. See [Skills](/docs/guide/skills/) for packaging rules, frontmatter validation, resources, and security exclusions.
-
-## Subagents and delegated tasks
-
-Declare named specialist profiles under `subagents`, then select one from `session.task(...)`:
-
-```ts
-const reviewer = defineAgentProfile({
-  name: 'reviewer',
-  model: 'anthropic/claude-sonnet-4-6',
-  instructions: 'Review only concrete correctness risks.',
-});
-
-const coordinator = createAgent(() => ({
-  model: 'anthropic/claude-haiku-4-5',
-  subagents: [reviewer],
-}));
-
-const response = await session.task('Review the change.', {
-  agent: 'reviewer',
-});
-```
-
-A task creates a detached child session; it does not create a workflow run. The selected profile controls child defaults such as model, instructions, tools, skills, nested subagents, reasoning, and compaction where those fields are provided. See [Subagents](/docs/guide/subagents/) for precedence and task options.
-
-## MCP-provided tools
-
-### `connectMcpServer(...)`
-
-```ts
-function connectMcpServer(
-  name: string,
-  options: McpServerOptions,
-): Promise<McpServerConnection>;
-```
-
-Connects to a remote MCP server and exposes the listed MCP tools as ordinary `ToolDefinition` values.
-
-```ts
-const inventory = await connectMcpServer('inventory', {
-  url: env.INVENTORY_MCP_URL,
-  headers: { Authorization: `Bearer ${env.INVENTORY_MCP_TOKEN}` },
-});
-
-try {
-  const harness = await init(agent, { tools: inventory.tools });
-  const session = await harness.session();
-  return await session.prompt('Check available inventory.');
-} finally {
-  await inventory.close();
-}
-```
-
-### `McpServerOptions`
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `url` | `string \| URL` | MCP server endpoint. |
-| `transport` | `'streamable-http' \| 'sse'` | Remote HTTP transport; defaults to `'streamable-http'`. |
-| `headers` | `HeadersInit` | Headers merged into MCP transport requests. |
-| `requestInit` | `RequestInit` | Additional request configuration. |
-| `fetch` | `typeof fetch` | Optional custom fetch implementation. |
-| `clientName` | `string` | MCP client name; defaults to `flue`. |
-| `clientVersion` | `string` | MCP client version; defaults to `0.0.0`. |
-
-### `McpServerConnection`
+#### `McpServerConnection`
 
 ```ts
 interface McpServerConnection {
@@ -284,11 +158,373 @@ interface McpServerConnection {
 }
 ```
 
-MCP tools receive model-visible names in the form `mcp__<server>__<tool>`, with unsupported name characters sanitized. Duplicate MCP names after sanitizing fail. Close each connection when its tools are no longer needed.
+| Field     | Description                                            |
+| --------- | ------------------------------------------------------ |
+| `name`    | Server name supplied to `connectMcpServer()`.          |
+| `tools`   | MCP tools adapted into ordinary Flue tool definitions. |
+| `close()` | Close the underlying MCP client connection.            |
 
-## Related API pages
+## `createAgent(...)`
 
-- [Harness API](/docs/api/harness-api/) covers session operations that use configured capabilities.
-- [Application API](/docs/api/application-api/) covers mounted routes, provider configuration, dispatch, and observation.
-- [Sandbox Connector API](/docs/api/sandbox-api/) covers execution environment adapters.
-- [Data Persistence API](/docs/api/data-persistence-api/) covers custom conversation-state stores.
+```ts
+function createAgent<TPayload = unknown, TEnv = Record<string, any>>(
+  initialize: (
+    context: AgentCreateContext<TPayload, TEnv>,
+  ) => AgentRuntimeConfig | Promise<AgentRuntimeConfig>,
+): CreatedAgent<TPayload, TEnv>;
+```
+
+Creates an agent initializer. Default-export the returned value from an `agents/<name>.ts` module to define an addressable agent, or pass it to `ctx.init()` inside a workflow.
+
+The initializer runs whenever the runtime initializes a harness from the created agent: when a workflow calls `ctx.init()`, and when the runtime prepares an addressable agent interaction. Do not treat it as a one-time constructor for a persistent agent instance id. Return a runtime config object with `model: '<provider>/<model>'`, `model: false`, or a profile with its own model field.
+
+#### `AgentCreateContext`
+
+| Field     | Type                    | Description                                                                 |
+| --------- | ----------------------- | --------------------------------------------------------------------------- |
+| `id`      | `string`                | Agent instance id, or workflow run id when initialized with `ctx.init()`.   |
+| `env`     | `TEnv`                  | Platform environment bindings supplied by the runtime.                      |
+| `payload` | `TPayload \| undefined` | Workflow payload when initialized with `ctx.init()`; otherwise `undefined`. |
+
+#### `AgentRuntimeConfig`
+
+| Field           | Type                                     | Description                                                                                                         |
+| --------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `profile`       | `AgentProfile`                           | Reusable baseline profile. Created-agent fields replace or extend profile values.                                   |
+| `model`         | `string \| false`                        | Default model specifier. Set to `false` to require call-level model selection.                                      |
+| `instructions`  | `string`                                 | Instructions prepended to discovered workspace context.                                                             |
+| `skills`        | `Skill[]`                                | Additional registered skills available to initialized sessions.                                                     |
+| `tools`         | `ToolDefinition[]`                       | Additional custom model-callable tools available to initialized sessions.                                           |
+| `subagents`     | `AgentProfile[]`                         | Additional named profiles available for delegated `session.task()` operations.                                      |
+| `thinkingLevel` | `ThinkingLevel`                          | Default reasoning effort. Individual operations may override this value.                                            |
+| `compaction`    | `false \| CompactionConfig`              | Automatic conversation-compaction configuration. `false` disables threshold compaction; overflow recovery and explicit `session.compact()` calls still compact when needed. |
+| `cwd`           | `string`                                 | Working directory inside the initialized sandbox.                                                                   |
+| `sandbox`       | `false \| SandboxFactory \| BashFactory` | Sandbox factory used to construct the initialized environment. See [Sandboxes](/docs/guide/sandboxes/).             |
+| `persist`       | `SessionStore`                           | Conversation-state store used by initialized sessions. See [Data Persistence API](/docs/api/data-persistence-api/). |
+
+#### `CreatedAgent`
+
+`CreatedAgent` is the opaque initializer value returned by `createAgent()`.
+
+## `init(...)`
+
+```ts
+interface FlueContext<TPayload, TEnv> {
+  init(agent: CreatedAgent<TPayload, TEnv>, options?: AgentHarnessOptions): Promise<FlueHarness>;
+}
+```
+
+`ctx.init()` initializes a created agent for one workflow invocation. Each harness name may be initialized once per context. The default harness name is `'default'`.
+
+#### `AgentHarnessOptions`
+
+| Field       | Type               | Default     | Description                                                                    |
+| ----------- | ------------------ | ----------- | ------------------------------------------------------------------------------ |
+| `name`      | `string`           | `'default'` | Harness name.                                                                  |
+| `tools`     | `ToolDefinition[]` | —           | Additional custom model-callable tools available to initialized sessions.      |
+| `skills`    | `Skill[]`          | —           | Additional registered skills available to initialized sessions.                |
+| `subagents` | `AgentProfile[]`   | —           | Additional named profiles available for delegated `session.task()` operations. |
+
+## Agent
+
+A created agent is the value returned by `createAgent()`. Addressable agents are default-exported from `agents/<name>.ts`. Workflows initialize a created agent with `ctx.init()`.
+
+## Harness
+
+A harness is an initialized agent environment returned by `ctx.init()`.
+
+#### `FlueHarness`
+
+Initialized agent environment returned by `ctx.init()`.
+
+```ts
+interface FlueHarness {
+  readonly name: string;
+  session(name?: string): Promise<FlueSession>;
+  readonly sessions: FlueSessions;
+  shell(command: string, options?: ShellOptions): CallHandle<ShellResult>;
+  readonly fs: FlueFs;
+}
+```
+
+### `harness.session(...)`
+
+```ts
+session(name?: string): Promise<FlueSession>;
+```
+
+Gets or creates a session in this harness. Defaults to the `'default'` session.
+
+### `harness.sessions.get(...)`
+
+```ts
+get(name?: string): Promise<FlueSession>;
+```
+
+Loads an existing session. Defaults to `'default'`. Throws if it does not exist.
+
+### `harness.sessions.create(...)`
+
+```ts
+create(name?: string): Promise<FlueSession>;
+```
+
+Creates a new session. Defaults to `'default'`. Throws if it already exists.
+
+### `harness.sessions.delete(...)`
+
+```ts
+delete(name?: string): Promise<void>;
+```
+
+Deletes a session's stored conversation state. Defaults to `'default'`. No-op when missing.
+
+### `harness.shell(...)`
+
+```ts
+shell(command: string, options?: ShellOptions): CallHandle<ShellResult>;
+```
+
+Runs a shell command in the harness sandbox without recording it in a conversation.
+
+### `harness.fs`
+
+- **Type:** `FlueFs`
+
+Reads and writes files in the harness sandbox without recording them in a conversation.
+
+## Session
+
+A session is named conversation state inside a harness. A session runs one active `prompt`, `skill`, `task`, `shell`, or `compact` operation at a time. Use separate named sessions for parallel conversation branches.
+
+#### `FlueSession`
+
+Named conversation state inside a harness.
+
+```ts
+interface FlueSession {
+  readonly name: string;
+  prompt(text: string, options?: PromptOptions): CallHandle<PromptResponse>;
+  skill(skill: SkillReference | string, options?: SkillOptions): CallHandle<PromptResponse>;
+  task(text: string, options?: TaskOptions): CallHandle<PromptResponse>;
+  shell(command: string, options?: ShellOptions): CallHandle<ShellResult>;
+  readonly fs: FlueFs;
+  compact(): Promise<void>;
+  delete(): Promise<void>;
+}
+```
+
+The `prompt()`, `skill()`, and `task()` signatures above omit structured-result overloads. Pass a Valibot schema as `options.result` to resolve with validated `response.data`.
+
+### `session.prompt(...)`
+
+```ts
+prompt(text: string, options?: PromptOptions): CallHandle<PromptResponse>;
+```
+
+Runs a model operation with a text instruction.
+
+#### `PromptOptions`
+
+| Field           | Type               | Description                                                           |
+| --------------- | ------------------ | --------------------------------------------------------------------- |
+| `result`        | Valibot schema     | Require validated structured data and resolve with `response.data`.   |
+| `tools`         | `ToolDefinition[]` | Additional custom model-callable tools for this operation.            |
+| `model`         | `string`           | Model specifier override for this operation.                          |
+| `thinkingLevel` | `ThinkingLevel`    | Reasoning-effort override for this operation.                         |
+| `signal`        | `AbortSignal`      | Cancel this operation.                                                |
+| `images`        | `PromptImage[]`    | Images attached to the user message. Requires a vision-capable model. |
+| `schema`        | Valibot schema     | Deprecated alias for `result`.                                        |
+
+#### `PromptImage`
+
+```ts
+type PromptImage = {
+  type: 'image';
+  data: string;
+  mimeType: string;
+};
+```
+
+The selected model must support image input.
+
+#### `PromptResponse`
+
+```ts
+interface PromptResponse {
+  text: string;
+  usage: PromptUsage;
+  model: PromptModel;
+}
+```
+
+#### `PromptUsage`
+
+Aggregated token and cost usage for model work performed by one operation. Tool use, result retries, and automatic compaction may cause one operation to include multiple model turns.
+
+#### `PromptModel`
+
+```ts
+interface PromptModel {
+  provider: string;
+  id: string;
+}
+```
+
+Model selected for the operation's primary turn.
+
+#### `PromptResultResponse`
+
+```ts
+interface PromptResultResponse<T> {
+  data: T;
+  usage: PromptUsage;
+  model: PromptModel;
+}
+```
+
+Use `result` and `response.data` in new code. The `schema` option and former `response.result` field are deprecated compatibility names. A structured-result operation throws `ResultUnavailableError` when the agent cannot produce validated data.
+
+### `session.skill(...)`
+
+```ts
+skill(skill: SkillReference | string, options?: SkillOptions): CallHandle<PromptResponse>;
+```
+
+Runs a registered skill. Pass `options.result` to require validated structured data instead of freeform text.
+
+#### `SkillReference`
+
+```ts
+interface SkillReference {
+  readonly __flueSkillReference: true;
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+}
+```
+
+Opaque imported packaged-skill reference accepted by `session.skill()`. Import a `SKILL.md` value rather than constructing one manually.
+
+#### `SkillOptions`
+
+| Field           | Type                      | Description                                                                   |
+| --------------- | ------------------------- | ----------------------------------------------------------------------------- |
+| `args`          | `Record<string, unknown>` | Arguments included with the skill instruction.                                |
+| `result`        | Valibot schema            | Require validated structured data and resolve with `response.data`.           |
+| `tools`         | `ToolDefinition[]`        | Additional custom model-callable tools for this operation.                    |
+| `model`         | `string`                  | Model specifier override for this operation.                                  |
+| `thinkingLevel` | `ThinkingLevel`           | Reasoning-effort override for this operation.                                 |
+| `signal`        | `AbortSignal`             | Cancel this operation.                                                        |
+| `images`        | `PromptImage[]`           | Images attached to the skill's user message. Requires a vision-capable model. |
+| `schema`        | Valibot schema            | Deprecated alias for `result`.                                                |
+
+### `session.task(...)`
+
+```ts
+task(text: string, options?: TaskOptions): CallHandle<PromptResponse>;
+```
+
+Delegates work to a detached child session. Pass `options.agent` to select a named subagent profile and `options.result` to require validated data.
+
+#### `TaskOptions`
+
+| Field           | Type               | Description                                                                          |
+| --------------- | ------------------ | ------------------------------------------------------------------------------------ |
+| `agent`         | `string`           | Named subagent profile selected for this delegated task.                             |
+| `result`        | Valibot schema     | Require validated structured data and resolve with `response.data`.                  |
+| `tools`         | `ToolDefinition[]` | Additional custom model-callable tools for this operation.                           |
+| `model`         | `string`           | Model specifier override for this operation.                                         |
+| `thinkingLevel` | `ThinkingLevel`    | Reasoning-effort override for this operation.                                        |
+| `cwd`           | `string`           | Working directory for the detached task session. Defaults to the parent session cwd. |
+| `signal`        | `AbortSignal`      | Cancel this task.                                                                    |
+| `images`        | `PromptImage[]`    | Images attached to the task's initial user message. Requires a vision-capable model. |
+| `schema`        | Valibot schema     | Deprecated alias for `result`.                                                       |
+
+### `session.shell(...)`
+
+```ts
+shell(command: string, options?: ShellOptions): CallHandle<ShellResult>;
+```
+
+Runs a shell command and records its command exchange in conversation state.
+
+#### `ShellOptions`
+
+| Field    | Type                     | Description                                    |
+| -------- | ------------------------ | ---------------------------------------------- |
+| `env`    | `Record<string, string>` | Environment variables supplied to the command. |
+| `cwd`    | `string`                 | Working directory supplied to the command.     |
+| `signal` | `AbortSignal`            | Cancel this operation.                         |
+
+#### `ShellResult`
+
+```ts
+interface ShellResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+```
+
+### `session.fs`
+
+- **Type:** `FlueFs`
+
+Reads and writes files in the session sandbox without recording them in the conversation transcript.
+
+### `session.compact()`
+
+```ts
+compact(): Promise<void>;
+```
+
+Triggers conversation compaction immediately. Resolves without work when there is nothing to compact. Throws if another operation is active on the session.
+
+### `session.delete()`
+
+```ts
+delete(): Promise<void>;
+```
+
+Deletes this session's stored conversation state.
+
+#### `CallHandle<T>`
+
+```ts
+interface CallHandle<T> extends PromiseLike<T> {
+  readonly signal: AbortSignal;
+  abort(reason?: unknown): void;
+}
+```
+
+`prompt()`, `skill()`, `task()`, and `shell()` return awaitable call handles. Retain the handle when application code needs to cancel in-flight work. Aborting rejects the awaited operation with an `AbortError` (`DOMException`). Pass `options.signal` to merge an external abort signal with the handle's signal.
+
+#### `FlueFs`
+
+```ts
+interface FlueFs {
+  readFile(path: string): Promise<string>;
+  readFileBuffer(path: string): Promise<Uint8Array>;
+  writeFile(path: string, content: string | Uint8Array): Promise<void>;
+  stat(path: string): Promise<FileStat>;
+  readdir(path: string): Promise<string[]>;
+  exists(path: string): Promise<boolean>;
+  mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
+  rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void>;
+}
+```
+
+Paths may be absolute or relative. Relative paths use the configured `cwd`, or the sandbox connector's default when `cwd` is omitted; use absolute paths for portability across connectors. These operations are out-of-band and do not appear in conversation history.
+
+#### `FileStat`
+
+```ts
+interface FileStat {
+  isFile: boolean;
+  isDirectory: boolean;
+  isSymbolicLink: boolean;
+  size: number;
+  mtime: Date;
+}
+```

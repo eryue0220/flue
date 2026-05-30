@@ -12,36 +12,57 @@ import {
 	webSocketUrl,
 	type WorkflowSocket,
 } from './public/websocket.ts';
-import type { AgentManifestEntry, AttachedAgentEvent, DirectAgentPayload, ListResponse, RunPointer, RunRecord, RunStatus } from './types.ts';
+import type { AgentManifestEntry, AttachedAgentEvent, DirectAgentPayload, FlueEvent, ListResponse, RunPointer, RunRecord, RunStatus } from './types.ts';
 
 export type { RequestHeaders };
 
+/** Options for creating a client for deployed Flue application routes. */
 export interface CreateFlueClientOptions extends HttpClientOptions {
-	/** Mount path for `admin()`. Defaults to `/admin`. */
+	/** Mount path for read-only admin routes. Defaults to `/admin`. */
 	adminBasePath?: string;
+	/** Custom WebSocket implementation. Defaults to the global `WebSocket` constructor. */
 	websocket?: WebSocketFactory;
+	/** Optional mount path prepended to agent and workflow WebSocket routes. */
 	websocketBasePath?: string;
+	/** Transforms each WebSocket URL after HTTP protocol conversion, for example to add handshake authentication. */
 	websocketUrl?: WebSocketUrlTransform;
 }
 
+/** Client for invoking deployed agents and workflows and inspecting workflow runs. */
 export interface FlueClient {
+	/** Workflow-run inspection APIs. Direct agent interactions and dispatched agent inputs are not runs. */
 	runs: {
+		/** Retrieves one workflow-run record. */
 		get(runId: string): Promise<RunRecord>;
-		events(runId: string, options?: { after?: number; types?: string[]; limit?: number }): Promise<{ events: unknown[] }>;
+		/** Retrieves recorded workflow-run events. */
+		events(runId: string, options?: { after?: number; types?: string[]; limit?: number }): Promise<{ events: FlueEvent[] }>;
+		/** Streams workflow-run events until `run_end`, cancellation, or an unrecoverable error. */
 		stream(runId: string, options?: StreamOptions): AsyncIterable<import('./types.ts').FlueEvent>;
 	};
+	/** Direct interactions with persistent agent instances. */
 	agents: {
+		/** Streams events for one agent prompt. */
 		invoke(name: string, id: string, options: { mode: 'stream'; payload: DirectAgentPayload; signal?: AbortSignal }): AsyncIterable<AttachedAgentEvent>;
+		/** Resolves the terminal result for one agent prompt. */
 		invoke(name: string, id: string, options: { mode: 'sync'; payload: DirectAgentPayload; signal?: AbortSignal }): Promise<SyncInvokeResult>;
+		/** Opens a reusable WebSocket connection to an agent instance. */
 		connect(name: string, id: string): AgentSocket;
 	};
+	/** Workflow invocation APIs. */
 	workflows: {
+		/** Opens a WebSocket connection for one workflow invocation. */
 		connect(name: string): WorkflowSocket;
 	};
+	/** Read-only APIs exposed by the configured admin mount path. */
 	admin: {
-		agents: { list(): Promise<ListResponse<AgentManifestEntry>> };
+		agents: {
+			/** Lists exposed agents and their supported transports. */
+			list(): Promise<ListResponse<AgentManifestEntry>>;
+		};
 		runs: {
+			/** Lists workflow-run summaries. */
 			list(options?: ListRunsOptions): Promise<ListResponse<RunPointer>>;
+			/** Retrieves one workflow-run record from the admin mount path. */
 			get(runId: string): Promise<RunRecord>;
 		};
 	};
@@ -57,6 +78,7 @@ interface ListRunsOptions extends ListOptions {
 	workflowName?: string;
 }
 
+/** Creates a client for the public and read-only admin routes of a deployed Flue application. */
 export function createFlueClient(options: CreateFlueClientOptions): FlueClient {
 	const http = new HttpClient(options);
 	const websocket = options.websocket ?? defaultWebSocketFactory;

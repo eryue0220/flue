@@ -3,7 +3,6 @@ import type { ImageContent, Model, TSchema } from '@earendil-works/pi-ai';
 import type { MiddlewareHandler } from 'hono';
 import type * as v from 'valibot';
 
-
 export type { ThinkingLevel };
 
 export type AgentRouteHandler = MiddlewareHandler;
@@ -137,9 +136,13 @@ export type WorkflowWebSocketServerMessage =
 
 export type WebSocketServerMessage = AgentWebSocketServerMessage | WorkflowWebSocketServerMessage;
 
+/** Context passed to a {@link createAgent} initializer. */
 export interface AgentCreateContext<TPayload = unknown, TEnv = Record<string, any>> {
+	/** Agent instance id, or workflow run id when initialized with `ctx.init()`. */
 	readonly id: string;
+	/** Platform environment bindings supplied by the runtime. */
 	readonly env: TEnv;
+	/** Workflow payload when initialized with `ctx.init()`; otherwise `undefined`. */
 	readonly payload: TPayload | undefined;
 }
 
@@ -152,6 +155,7 @@ export type PromptImage = ImageContent;
 
 // ─── Skill ──────────────────────────────────────────────────────────────────
 
+/** Imported packaged skill reference accepted by `session.skill()`. */
 export interface SkillReference {
 	readonly __flueSkillReference: true;
 	readonly id: string;
@@ -172,12 +176,13 @@ export interface PackagedSkillDirectory {
 	readonly files: Record<string, PackagedSkillFile>;
 }
 
+/** Skill metadata registered with an agent, harness, or profile. */
 export type Skill =
 	| SkillReference
 	| {
 			name: string;
 			description: string;
-		};
+	  };
 
 // ─── Custom Tools ───────────────────────────────────────────────────────────
 
@@ -203,6 +208,7 @@ export interface ToolDefinition<TParams extends ToolParameters = ToolParameters>
 
 // ─── File Stat ──────────────────────────────────────────────────────────────
 
+/** File metadata returned by {@link FlueFs.stat}. */
 export interface FileStat {
 	isFile: boolean;
 	isDirectory: boolean;
@@ -326,10 +332,9 @@ export interface CompactionConfig {
 	 * Token headroom to reserve in the context window. Compaction triggers
 	 * when used tokens exceed `contextWindow - reserveTokens`.
 	 *
-	 * Defaults to `min(20000, model.maxTokens || 20000)` — a flat 20k cap,
-	 * shrunk on models that emit fewer output tokens than that. On a 200k
-	 * Sonnet window this triggers compaction near 96% full, matching the
-	 * defaults used by OpenCode, Claude Code, and similar agents.
+	 * Defaults to a model-aware value capped at 20000 tokens, shrunk for models
+	 * with smaller output limits and adjusted when the reserve would consume
+	 * half or more of a small context window.
 	 */
 	reserveTokens?: number;
 	/**
@@ -403,45 +408,81 @@ export interface AgentConfig {
 	compaction?: false | CompactionConfig;
 }
 
+/** Model specifier, or `false` to require call-level model selection. */
 export type ModelConfig = string | false;
 
 // ─── Agent Profile and Runtime Creation ─────────────────────────────────────
 
+/** Reusable agent behavior accepted by {@link defineAgentProfile}. */
 export interface AgentProfile {
+	/** Profile name. Required when selecting this profile with `session.task()`. */
 	name?: string;
 	description?: string;
+	/** Default model specifier. Set to `false` to require call-level model selection. */
 	model?: ModelConfig;
+	/** Instructions prepended to discovered workspace context. */
 	instructions?: string;
+	/** Registered skills available to sessions initialized from this profile. */
 	skills?: Skill[];
+	/** Custom model-callable tools available to sessions initialized from this profile. */
 	tools?: ToolDefinition[];
+	/** Named profiles available for delegated `session.task()` operations. */
 	subagents?: AgentProfile[];
+	/** Default reasoning effort. Individual operations may override this value. */
 	thinkingLevel?: ThinkingLevel;
+	/**
+	 * Automatic conversation-compaction configuration. `false` disables
+	 * threshold compaction; overflow recovery and explicit `session.compact()`
+	 * calls still compact when needed.
+	 */
 	compaction?: false | CompactionConfig;
 }
 
+/** Configuration returned by a {@link createAgent} initializer. */
 export interface AgentRuntimeConfig {
+	/** Reusable baseline profile. Created-agent fields replace or extend profile values. */
 	profile?: AgentProfile;
 	name?: string;
 	description?: string;
+	/** Default model specifier. Set to `false` to require call-level model selection. */
 	model?: ModelConfig;
+	/** Instructions prepended to discovered workspace context. */
 	instructions?: string;
+	/** Additional registered skills available to initialized sessions. */
 	skills?: Skill[];
+	/** Additional custom model-callable tools available to initialized sessions. */
 	tools?: ToolDefinition[];
+	/** Additional named profiles available for delegated `session.task()` operations. */
 	subagents?: AgentProfile[];
+	/** Default reasoning effort. Individual operations may override this value. */
 	thinkingLevel?: ThinkingLevel;
+	/**
+	 * Automatic conversation-compaction configuration. `false` disables
+	 * threshold compaction; overflow recovery and explicit `session.compact()`
+	 * calls still compact when needed.
+	 */
 	compaction?: false | CompactionConfig;
+	/** Working directory inside the initialized sandbox. */
 	cwd?: string;
+	/** Sandbox factory used to construct the initialized environment. */
 	sandbox?: false | SandboxFactory | BashFactory;
+	/** Conversation-state store used by initialized sessions. */
 	persist?: SessionStore;
 }
 
+/** Options for {@link FlueContext.init}. */
 export interface AgentHarnessOptions {
+	/** Harness name. Defaults to `'default'`. */
 	name?: string;
+	/** Additional custom model-callable tools available to initialized sessions. */
 	tools?: ToolDefinition[];
+	/** Additional registered skills available to initialized sessions. */
 	skills?: Skill[];
+	/** Additional named profiles available for delegated `session.task()` operations. */
 	subagents?: AgentProfile[];
 }
 
+/** Opaque agent initializer created by {@link createAgent}. */
 export interface CreatedAgent<TPayload = unknown, TEnv = any> {
 	readonly __flueCreatedAgent: true;
 	readonly initialize: (
@@ -487,11 +528,11 @@ export interface FlueContext<TPayload = any, TEnv = Record<string, any>> {
 	readonly req: Request | undefined;
 	/** Emit observable structured log events, persisted in a run stream only during a workflow run. */
 	readonly log: FlueLogger;
-	/** Initialize a created agent for this workflow invocation. */
-	init(
-		agent: CreatedAgent<TPayload, TEnv>,
-		options?: AgentHarnessOptions,
-	): Promise<FlueHarness>;
+	/**
+	 * Initialize a created agent for this workflow invocation. Each harness name
+	 * may be initialized once per context. Defaults to the `'default'` harness.
+	 */
+	init(agent: CreatedAgent<TPayload, TEnv>, options?: AgentHarnessOptions): Promise<FlueHarness>;
 }
 
 export interface FlueLogger {
@@ -500,13 +541,14 @@ export interface FlueLogger {
 	error(message: string, attributes?: Record<string, unknown>): void;
 }
 
-
 // ─── Flue Harness (returned by init()) ──────────────────────────────────────
 
+/** Initialized agent environment returned by {@link FlueContext.init}. */
 export interface FlueHarness {
+	/** Harness name selected by {@link AgentHarnessOptions.name}. */
 	readonly name: string;
 
-	/** Get or create a session in this harness. Defaults to the "default" session. */
+	/** Get or create a session in this harness. Defaults to the `'default'` session. */
 	session(name?: string): Promise<FlueSession>;
 
 	/** Explicit session management helpers. */
@@ -516,18 +558,19 @@ export interface FlueHarness {
 	shell(command: string, options?: ShellOptions): CallHandle<ShellResult>;
 
 	/**
-	 * Read and write files in the harness sandbox without recording in a
+	 * Read and write files in the harness sandbox without recording them in a
 	 * conversation. See {@link FlueFs}.
 	 */
 	readonly fs: FlueFs;
 }
 
+/** Explicit session management helpers exposed by {@link FlueHarness.sessions}. */
 export interface FlueSessions {
-	/** Load an existing session. Throws if it does not exist. */
+	/** Load an existing session. Defaults to `'default'`. Throws if it does not exist. */
 	get(name?: string): Promise<FlueSession>;
-	/** Create a new session. Throws if it already exists. */
+	/** Create a new session. Defaults to `'default'`. Throws if it already exists. */
 	create(name?: string): Promise<FlueSession>;
-	/** Delete a session's stored conversation state. No-op when missing. */
+	/** Delete a session's stored conversation state. Defaults to `'default'`. No-op when missing. */
 	delete(name?: string): Promise<void>;
 }
 
@@ -535,9 +578,9 @@ export interface FlueSessions {
 
 /**
  * Awaitable handle returned by `prompt()`, `skill()`, `task()`, and `shell()`.
- * Aborting rejects the awaited value with an `AbortError` (a `DOMException`)
- * whose `cause` is the signal's `reason`. Pass `options.signal` to merge an
- * external `AbortSignal` (e.g. `AbortSignal.timeout(ms)`) with the handle's.
+ * Aborting rejects the awaited value with an `AbortError` (a `DOMException`).
+ * Pass `options.signal` to merge an external `AbortSignal` (e.g.
+ * `AbortSignal.timeout(ms)`) with the handle's.
  */
 export interface CallHandle<T> extends PromiseLike<T> {
 	/** Fires when the call is aborted, whether via `abort()` or `options.signal`. */
@@ -546,9 +589,15 @@ export interface CallHandle<T> extends PromiseLike<T> {
 	abort(reason?: unknown): void;
 }
 
+/** Named conversation state inside a {@link FlueHarness}. */
 export interface FlueSession {
+	/** Session name. */
 	readonly name: string;
 
+	/**
+	 * Run a model operation with a text instruction. Pass `options.result` to
+	 * require validated structured data instead of freeform text.
+	 */
 	prompt<S extends v.GenericSchema>(
 		text: string,
 		options: PromptOptions<S> & { result: S },
@@ -559,6 +608,7 @@ export interface FlueSession {
 	): CallHandle<PromptResultResponse<v.InferOutput<S>>>;
 	prompt(text: string, options?: PromptOptions): CallHandle<PromptResponse>;
 
+	/** Run a shell command and record its command exchange in conversation state. */
 	shell(command: string, options?: ShellOptions): CallHandle<ShellResult>;
 
 	/**
@@ -568,6 +618,10 @@ export interface FlueSession {
 	 */
 	readonly fs: FlueFs;
 
+	/**
+	 * Run a registered skill. Pass `options.result` to require validated
+	 * structured data instead of freeform text.
+	 */
 	skill<S extends v.GenericSchema>(
 		skill: SkillReference | string,
 		options: SkillOptions<S> & { result: S },
@@ -578,6 +632,10 @@ export interface FlueSession {
 	): CallHandle<PromptResultResponse<v.InferOutput<S>>>;
 	skill(skill: SkillReference | string, options?: SkillOptions): CallHandle<PromptResponse>;
 
+	/**
+	 * Delegate work to a detached child session. Pass `options.agent` to select
+	 * a named subagent profile and `options.result` to require validated data.
+	 */
 	task<S extends v.GenericSchema>(
 		text: string,
 		options: TaskOptions<S> & { result: S },
@@ -605,6 +663,7 @@ export interface FlueSession {
 	 */
 	compact(): Promise<void>;
 
+	/** Delete this session's stored conversation state. */
 	delete(): Promise<void>;
 }
 
@@ -651,13 +710,19 @@ export interface PromptModel {
 	id: string;
 }
 
+/** Freeform text response returned by `session.prompt()`, `session.skill()`, and `session.task()`. */
 export interface PromptResponse {
+	/** Assistant text returned by the operation. */
 	text: string;
+	/** Aggregated token and cost usage for model work performed by the operation. */
 	usage: PromptUsage;
+	/** Model selected for the operation's primary turn. */
 	model: PromptModel;
 }
 
+/** Validated structured response returned when an operation receives `options.result`. */
 export interface PromptResultResponse<T> {
+	/** Validated structured data inferred from the supplied schema. */
 	data: T;
 	/**
 	 * @deprecated Renamed to `data`; will be removed in a future release.
@@ -737,15 +802,17 @@ export interface SessionStore {
 
 // ─── Options ────────────────────────────────────────────────────────────────
 
-/** All option fields are scoped to the duration of the call. */
+/** All option fields are scoped to the duration of the `session.prompt()` call. */
 export interface PromptOptions<S extends v.GenericSchema | undefined = undefined> {
+	/** Require validated structured data and resolve with `response.data`. */
 	result?: S;
 	/**
 	 * @deprecated Use `result` for structured output schemas.
 	 */
 	schema?: S;
+	/** Additional custom model-callable tools for this operation. */
 	tools?: ToolDefinition[];
-	/** e.g., 'anthropic/claude-sonnet-4-20250514' */
+	/** Model specifier override for this operation. */
 	model?: string;
 	/** Override reasoning effort for this call. See `AgentRuntimeConfig.thinkingLevel`. */
 	thinkingLevel?: ThinkingLevel;
@@ -755,14 +822,19 @@ export interface PromptOptions<S extends v.GenericSchema | undefined = undefined
 	images?: PromptImage[];
 }
 
+/** All option fields are scoped to the duration of the `session.skill()` call. */
 export interface SkillOptions<S extends v.GenericSchema | undefined = undefined> {
+	/** Arguments included with the skill instruction. */
 	args?: Record<string, unknown>;
+	/** Require validated structured data and resolve with `response.data`. */
 	result?: S;
 	/**
 	 * @deprecated Use `result` for structured output schemas.
 	 */
 	schema?: S;
+	/** Additional custom model-callable tools for this operation. */
 	tools?: ToolDefinition[];
+	/** Model specifier override for this operation. */
 	model?: string;
 	/** Override reasoning effort for this call. See `AgentRuntimeConfig.thinkingLevel`. */
 	thinkingLevel?: ThinkingLevel;
@@ -772,14 +844,19 @@ export interface SkillOptions<S extends v.GenericSchema | undefined = undefined>
 	images?: PromptImage[];
 }
 
+/** All option fields are scoped to the duration of the `session.task()` call. */
 export interface TaskOptions<S extends v.GenericSchema | undefined = undefined> {
+	/** Require validated structured data and resolve with `response.data`. */
 	result?: S;
+	/** Named subagent profile selected for this delegated task. */
 	agent?: string;
 	/**
 	 * @deprecated Use `result` for structured output schemas.
 	 */
 	schema?: S;
+	/** Additional custom model-callable tools for this operation. */
 	tools?: ToolDefinition[];
+	/** Model specifier override for this operation. */
 	model?: string;
 	/** Override reasoning effort for this call. See `AgentRuntimeConfig.thinkingLevel`. */
 	thinkingLevel?: ThinkingLevel;
@@ -791,13 +868,17 @@ export interface TaskOptions<S extends v.GenericSchema | undefined = undefined> 
 	images?: PromptImage[];
 }
 
+/** Options for `harness.shell()` and `session.shell()`. */
 export interface ShellOptions {
+	/** Environment variables supplied to the command. */
 	env?: Record<string, string>;
+	/** Working directory supplied to the command. */
 	cwd?: string;
 	/** Cancel this call. See `CallHandle`. */
 	signal?: AbortSignal;
 }
 
+/** Result returned by `harness.shell()` and `session.shell()`. */
 export interface ShellResult {
 	stdout: string;
 	stderr: string;
@@ -914,7 +995,7 @@ export type FlueEvent = (
 			startedAt: string;
 			restartedFromRunId?: string;
 			payload: unknown;
-		}
+	  }
 	| {
 			type: 'run_resume';
 			runId: string;
@@ -922,7 +1003,7 @@ export type FlueEvent = (
 			instanceId: string;
 			workflowName: string;
 			startedAt: string;
-		}
+	  }
 	| { type: 'agent_start' }
 	| { type: 'agent_end'; messages: AgentMessage[] }
 	| { type: 'turn_start'; turnId: string; purpose: LlmTurnPurpose }
@@ -939,14 +1020,32 @@ export type FlueEvent = (
 				tools?: LlmTool[];
 			};
 			reasoning?: string;
-		}
-	| { type: 'turn_end'; turnId: string; purpose: LlmTurnPurpose; message: AgentMessage; toolResults: AgentMessage[] }
+	  }
+	| {
+			type: 'turn_end';
+			turnId: string;
+			purpose: LlmTurnPurpose;
+			message: AgentMessage;
+			toolResults: AgentMessage[];
+	  }
 	| { type: 'message_start'; message: AgentMessage }
 	| { type: 'message_update'; message: AgentMessage; assistantMessageEvent: unknown }
 	| { type: 'message_end'; message: AgentMessage }
 	| { type: 'tool_execution_start'; toolCallId: string; toolName: string; args: unknown }
-	| { type: 'tool_execution_update'; toolCallId: string; toolName: string; args: unknown; partialResult: unknown }
-	| { type: 'tool_execution_end'; toolCallId: string; toolName: string; result: unknown; isError: boolean }
+	| {
+			type: 'tool_execution_update';
+			toolCallId: string;
+			toolName: string;
+			args: unknown;
+			partialResult: unknown;
+	  }
+	| {
+			type: 'tool_execution_end';
+			toolCallId: string;
+			toolName: string;
+			result: unknown;
+			isError: boolean;
+	  }
 	| { type: 'text_delta'; text: string }
 	| { type: 'thinking_start' }
 	| { type: 'thinking_delta'; delta: string }
@@ -959,7 +1058,7 @@ export type FlueEvent = (
 			isError: boolean;
 			result?: any;
 			durationMs: number;
-		}
+	  }
 	| {
 			type: 'turn';
 			turnId: string;
@@ -973,20 +1072,33 @@ export type FlueEvent = (
 			stopReason?: string;
 			isError: boolean;
 			error?: unknown;
-		}
+	  }
 	| { type: 'task_start'; taskId: string; prompt: string; agent?: string; cwd?: string }
-	| { type: 'task'; taskId: string; agent?: string; isError: boolean; result?: any; durationMs: number }
+	| {
+			type: 'task';
+			taskId: string;
+			agent?: string;
+			isError: boolean;
+			result?: any;
+			durationMs: number;
+	  }
 	| {
 			type: 'compaction_start';
 			reason: 'threshold' | 'overflow' | 'manual';
 			estimatedTokens: number;
-		}
-	| { type: 'compaction'; messagesBefore: number; messagesAfter: number; durationMs: number; usage?: PromptUsage }
+	  }
+	| {
+			type: 'compaction';
+			messagesBefore: number;
+			messagesAfter: number;
+			durationMs: number;
+			usage?: PromptUsage;
+	  }
 	| {
 			type: 'operation_start';
 			operationId: string;
 			operationKind: 'prompt' | 'skill' | 'task' | 'shell' | 'compact';
-		}
+	  }
 	| {
 			type: 'operation';
 			operationId: string;
@@ -996,15 +1108,22 @@ export type FlueEvent = (
 			error?: unknown;
 			result?: unknown;
 			usage?: PromptUsage;
-		}
+	  }
 	| {
 			type: 'log';
 			level: 'info' | 'warn' | 'error';
 			message: string;
 			attributes?: Record<string, unknown>;
-		}
+	  }
 	| { type: 'idle' }
-	| { type: 'run_end'; runId: string; result?: unknown; isError: boolean; error?: unknown; durationMs: number }
+	| {
+			type: 'run_end';
+			runId: string;
+			result?: unknown;
+			isError: boolean;
+			error?: unknown;
+			durationMs: number;
+	  }
 ) & {
 	runId?: string;
 	instanceId?: string;
@@ -1019,7 +1138,10 @@ export type FlueEvent = (
 	turnId?: string;
 };
 
-export type AttachedAgentEvent = Exclude<FlueEvent, { type: 'run_start' } | { type: 'run_resume' } | { type: 'run_end' }> & {
+export type AttachedAgentEvent = Exclude<
+	FlueEvent,
+	{ type: 'run_start' } | { type: 'run_resume' } | { type: 'run_end' }
+> & {
 	runId?: never;
 	instanceId: string;
 };

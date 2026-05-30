@@ -36,7 +36,7 @@ an already-initialized provider sandbox plus options, and returns a
 session and uses the returned `SessionEnv` for all shell/file operations.
 
 ```ts
-// .flue/connectors/<provider>.ts (or ./connectors/<provider>.ts)
+// <source-dir>/connectors/<provider>.ts
 import { createSandboxSessionEnv } from '@flue/runtime';
 import type {
   SandboxApi,
@@ -260,19 +260,16 @@ recursive mkdir, try/catch on `exists()`, and buffer/string conversion in
 
 ## Where the Connector File Lives in the User's Project
 
-The user's project root is always the same. What
-varies is where the agent sources live inside it — analogous to Next.js's
-`src/` folder:
+The user's project root is always the same. What varies is the selected source
+directory inside it. Flue selects the first existing directory in this order:
 
-- **`.flue/` source layout** (root contains a `.flue/` directory holding
-  `agents/`, etc.): write the connector to
-  `./.flue/connectors/<name>.ts`.
-- **Bare layout** (root contains `agents/`, etc. at its root):
-  write the connector to `./connectors/<name>.ts`.
+1. `<root>/.flue/`
+2. `<root>/src/`
+3. `<root>/`
 
-The detection rule is simple: if `<root>/.flue/` exists, use the `.flue/`
-location; otherwise use the bare location. If neither feels right (uncommon
-layout, multiple workspaces, etc.), ask the user before writing.
+Write the connector to `<source-dir>/connectors/<name>.ts`. If the selected
+source directory is unclear (uncommon layout, multiple workspaces, etc.), ask
+the user before writing.
 
 ---
 
