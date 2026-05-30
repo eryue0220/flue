@@ -11,7 +11,7 @@ This makes a workflow different from an [agent](/docs/concepts/agents/). An agen
 
 A workflow is a module in `workflows/` or `.flue/workflows/` that exports a callable `run(...)` function. The filename gives the workflow its discovered name; for example, `.flue/workflows/summarize.ts` defines the `summarize` workflow.
 
-A workflow does not need an agent. It can perform ordinary TypeScript orchestration, use environment bindings, log progress, and return a value. When model-driven or sandboxed work is needed, it can initialize a created agent and use that agent's harness and sessions within the same invocation.
+Unlike an agent, a workflow runs once and then is complete. It can perform ordinary TypeScript orchestration, use environment bindings, log progress, and return a value. When model-driven or sandboxed work is needed, it can initialize a created agent and use that agent's harness and sessions within the same invocation.
 
 ```text
 workflow definition: summarize

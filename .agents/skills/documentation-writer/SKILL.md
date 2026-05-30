@@ -17,7 +17,10 @@ The human editor owns the product story: information architecture, page purpose,
 4. **Verify behavior before stating it.** Read relevant source, tests, examples, configuration, and existing terminology. Do not preserve outdated text because it already exists in documentation.
 5. **Let documentation reveal product problems.** If a page is difficult to explain because the implementation is unnecessarily complex, identify the simplification opportunity. When the user asks, improve the implementation before finalizing the docs.
 6. **Respect active editorial work.** Preserve user-authored drafts and nearby unrequested changes. Do not mechanically sweep adjacent documentation unless the user includes it in scope.
-7. **Write with human judgment.** Be direct, concise, confident, and specific. Remove filler, excessive defensive detail, repetitive caveats, and AI-style over-explanation.
+7. **Organize for the page type.** A guide usually organizes a product surface into clear topics and decisions rather than narrating a start-to-finish journey. Use a sequential build-up only for tutorials or truly sequential tasks.
+8. **Introduce without inventorying.** A page may briefly introduce adjacent capabilities that belong in the reader's mental map, even when their details live elsewhere. Do not turn that introduction into an exhaustive list of everything the product supports.
+9. **Teach one concept at a time in examples.** Keep the first or primary example focused on the section's essential interface; add identity, authorization, persistence, or advanced capabilities only where they are being explained.
+10. **Write with human judgment.** Be direct, concise, confident, and specific. Remove filler, excessive defensive detail, repetitive caveats, and AI-style over-explanation.
 
 ## Use Diátaxis pragmatically
 
@@ -26,7 +29,7 @@ Flue uses the Diátaxis model to decide a page's primary job, not as a rigid que
 | Document type | Primary user need | Writing posture |
 | --- | --- | --- |
 | Tutorial | Learn through a successful first experience | Guided, sequential, encouraging; defer exhaustive options. |
-| How-to guide | Accomplish a real task | Goal-led steps and decisions; include only context needed to complete the task. |
+| How-to guide | Understand or apply a product capability | Organize related tasks, configuration, and decisions into navigable topics; avoid implying a linear tutorial unless the task truly requires one. |
 | Reference | Look up the machinery accurately | Precise, structured, complete for its declared surface; avoid persuasive narrative. |
 | Explanation | Understand concepts and design choices | Editorial and conceptual; build a useful mental model without becoming an API inventory. |
 
@@ -75,8 +78,9 @@ Before drafting factual material:
 - inspect the relevant implementation and tests;
 - inspect existing conventions and terminology in adjacent approved docs;
 - locate navigation entries and inbound links if URLs or categories change;
-- identify examples that should express the canonical user path;
-- check whether the existing docs describe accidental or obsolete behavior.
+- identify examples that should express the canonical user path while isolating one new concept at a time;
+- check whether the existing docs describe accidental or obsolete behavior;
+- distinguish important related capabilities worth introducing briefly from detail that belongs in a dedicated guide or reference page.
 
 Documentation work may intentionally lead to code improvements. When the editor asks to simplify implementation first, implement and verify the product behavior, then write docs against the simplified contract.
 
@@ -86,9 +90,10 @@ When the structure is approved or explicitly provided, make the plan real:
 
 - write concise, polished content under the agreed headings;
 - keep each paragraph focused on that section's purpose;
-- use code or tree examples only when they make the interface or convention immediately clearer;
+- match section organization and heading style to the page mode: topical and lookup-friendly for guides, sequential only for tutorials or required procedures;
+- use code or tree examples only when they make the interface or convention immediately clearer, and avoid loading a basic example with unrelated concerns;
 - use the canonical documented path and terminology unless the page specifically explains alternatives;
-- link to deeper guides or reference pages rather than restating their contents;
+- introduce an adjacent capability briefly when readers need to know it belongs to this surface, then link to deeper guides or reference pages rather than restating its mechanics;
 - keep generated output, runtime context, source layout, and product concepts distinct when applicable;
 - do not imply conventions or special behavior that the product does not implement.
 
@@ -121,6 +126,9 @@ Do not:
 
 - start by rewriting prose before agreeing on substantial structural changes;
 - turn every page into an exhaustive specification;
+- turn a guide into a tutorial by default, organizing it around an implied build sequence when readers should be able to navigate its topics independently;
+- omit a significant capability solely because another page documents it in depth, or expand a brief introduction into a distracting feature inventory;
+- overload introductory examples with several concepts that can be introduced separately;
 - repeat optional-layout or edge-case explanations throughout all guides;
 - present ordinary colocated files as framework conventions merely because examples use them;
 - preserve an implementation detail when simplifying the product would produce a clearer contract;
