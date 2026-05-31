@@ -9,7 +9,7 @@ import {
 } from '@earendil-works/pi-ai';
 import type { CloudflareGatewayOptions } from '../cloudflare/gateway.ts';
 import { CLOUDFLARE_AI_BINDING_API } from '../cloudflare-model.ts';
-import type { ProviderSettings } from '../types.ts';
+import type { ProviderConfiguration } from '../types.ts';
 
 // ─── Public types ───────────────────────────────────────────────────────────
 
@@ -146,12 +146,7 @@ export const registerApiProvider = piRegisterApiProvider;
 // Transport-level settings keyed by provider ID. This keeps built-in catalog
 // metadata intact while letting apps patch auth/endpoints.
 
-/**
- * Provider settings accepted by {@link configureProvider}.
- */
-export type ProviderConfiguration = ProviderSettings;
-
-const providerSettingsById = new Map<string, ProviderSettings>();
+const providerSettingsById = new Map<string, ProviderConfiguration>();
 
 /**
  * Configure transport-level settings on an existing provider while preserving
@@ -179,7 +174,7 @@ export function configureProvider(
 /** Internal read accessor for provider settings. */
 export function getProviderConfiguration(
 	providerId: string,
-): ProviderSettings | undefined {
+): ProviderConfiguration | undefined {
 	return providerSettingsById.get(providerId);
 }
 

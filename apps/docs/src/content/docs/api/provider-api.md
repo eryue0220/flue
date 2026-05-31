@@ -32,7 +32,12 @@ Repeated calls for the same provider ID replace the previous settings object.
 ### `ProviderConfiguration`
 
 ```ts
-type ProviderConfiguration = ProviderSettings;
+interface ProviderConfiguration {
+  baseUrl?: string;
+  headers?: Record<string, string>;
+  apiKey?: string;
+  storeResponses?: boolean;
+}
 ```
 
 | Property         | Purpose                                                                                                                           |

@@ -33,7 +33,7 @@ export type {
 	PromptResponse,
 	PromptResultResponse,
 	PromptUsage,
-	ProviderSettings,
+	ProviderConfiguration,
 	SandboxFactory,
 	SessionData,
 	SessionEnv,

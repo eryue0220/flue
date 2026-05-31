@@ -58,7 +58,7 @@ export type {
 	ToolDefinition,
 	ToolParameters,
 	ThinkingLevel,
-	ProviderSettings,
+	ProviderConfiguration,
 	AgentRouteHandler,
 	AgentWebSocketHandler,
 	WorkflowRouteHandler,
@@ -85,7 +85,6 @@ export { type FlueEventSubscriber, observe } from './runtime/events.ts';
 export {
 	configureProvider,
 	type HttpProviderRegistration,
-	type ProviderConfiguration,
 	type ProviderRegistration,
 	registerApiProvider,
 	registerProvider,

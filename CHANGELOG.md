@@ -386,7 +386,7 @@ Big release! We are working hard to stabilize our APIs and add any missing and e
 
 - **Cloudflare Workers AI binding provider.** Models prefixed `cloudflare/<model-id>` route through `env.AI.run()` on the Cloudflare target with no API tokens — the only setup is `"ai": { "binding": "AI" }` in `wrangler.jsonc`. Works across role models, sub-tasks, and compaction. Hard error on `--target node` pointing users at pi-ai's URL-based providers.
 
-- **`ProviderSettings.storeResponses?: boolean`** opt-in. When enabled, sets `store: true` on outgoing requests for `openai-responses` and `azure-openai-responses`, enabling multi-turn against reasoning models when `thinkingLevel: 'off'` is explicitly set. (Codex Responses intentionally excluded — it rejects `store: true`.)
+- **`ProviderConfiguration.storeResponses?: boolean`** opt-in. When enabled, sets `store: true` on outgoing requests for `openai-responses` and `azure-openai-responses`, enabling multi-turn against reasoning models when `thinkingLevel: 'off'` is explicitly set. (Codex Responses intentionally excluded — it rejects `store: true`.)
 
 - **`session.shell()` is now a first-class transcript citizen.** It emits the same `tool_start` / `tool_end` events as an LLM-issued `bash` call (shared `toolCallId`, `toolName: 'bash'`) and appends a user / assistant tool-use / toolResult triple to history. Per-call `cwd` and `env` overrides are preserved in the synthetic tool-call `arguments` so they remain visible to the model on subsequent turns. Aborted commands now produce a `toolResult` with `isError: true` and the error message as text (previously dropped silently).
 

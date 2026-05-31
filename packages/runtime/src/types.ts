@@ -397,8 +397,8 @@ export interface CompactionConfig {
 
 // ─── Provider Runtime Settings ──────────────────────────────────────────────
 
-/** Per-provider transport settings configured from `@flue/runtime`. */
-export interface ProviderSettings {
+/** Per-provider transport settings accepted by `configureProvider(...)`. */
+export interface ProviderConfiguration {
 	/** Provider endpoint used by built-in models or registered providers. */
 	baseUrl?: string;
 	/** Headers merged into the resolved model's provider-level headers. */

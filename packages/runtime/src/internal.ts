@@ -14,7 +14,7 @@ import {
 	getProviderConfiguration,
 	resolveRegisteredModel,
 } from './runtime/providers.ts';
-import type { ModelConfig, ProviderSettings } from './types.ts';
+import type { ModelConfig, ProviderConfiguration } from './types.ts';
 
 export type { FlueContextConfig, FlueContextInternal } from './client.ts';
 export { createFlueContext } from './client.ts';
@@ -149,7 +149,7 @@ export function resolveModel(model: ModelConfig | undefined): Model<Api> | undef
 
 function applyProviderSettings<TApi extends Api>(
 	model: Model<TApi>,
-	providerSettings: ProviderSettings | undefined,
+	providerSettings: ProviderConfiguration | undefined,
 ): Model<TApi> {
 	if (!providerSettings) return model;
 

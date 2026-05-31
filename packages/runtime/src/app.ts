@@ -1,6 +1,7 @@
 export type { CloudflareAIBinding, CloudflareAIBindingRegistration } from './cloudflare/index.ts';
 export type { FlueEventSubscriber } from './runtime/events.ts';
-export type { HttpProviderRegistration, ProviderConfiguration, ProviderRegistration } from './runtime/providers.ts';
+export type { ProviderConfiguration } from './types.ts';
+export type { HttpProviderRegistration, ProviderRegistration } from './runtime/providers.ts';
 export type { Fetchable } from './routing.ts';
 
 function migrationError(helper: string, entrypoint: '@flue/runtime' | '@flue/runtime/routing'): never {
