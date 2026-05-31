@@ -43,20 +43,17 @@ describe('Cloudflare build plugin', () => {
 		expect(entry).not.toContain('createRegistryIdentity');
 	});
 
-	it('recovers interrupted workflows and retries interrupted direct agent prompts', async () => {
+	it('terminalizes interrupted workflows and retries interrupted direct agent prompts', async () => {
 		const entry = await new CloudflarePlugin().generateEntryPoint(testBuildContext());
 
 		expect(entry).toContain('failRecoveredRun');
 		expect(entry).toContain("ctx.name !== 'flue:workflow:' + doInstance.name");
-		expect(entry).toContain('const restartRunId = generateWorkflowRunId(workflowName);');
-		expect(entry).toContain("'x-flue-restarted-from-run-id': interruptedRunId");
-		expect(entry).toContain('restartedAsRunId: restartRunId');
-		expect(entry).toContain('Flue workflow execution was interrupted and restarted as run');
-		expect(entry).toContain('Flue workflow recovery input is unavailable; replacement admission was not attempted.');
-		expect(entry).toContain('const handler = localWorkflowHandlers[workflowName];');
-		expect(entry).toContain('const handler = isInternalRestart ? localWorkflowHandlers[workflowName] : workflowHandlers[workflowName];');
-		expect(entry).toContain("outcome: 'restart_admitted'");
-		expect(entry).toContain("outcome: 'restart_failed'");
+		expect(entry).toContain('Flue workflow execution was interrupted. Start a new workflow run explicitly if retry is appropriate.');
+		expect(entry).not.toContain('const restartRunId = generateWorkflowRunId(workflowName);');
+		expect(entry).not.toContain('x-flue-restarted-from-run-id');
+		expect(entry).not.toContain('restartedAsRunId: restartRunId');
+		expect(entry).not.toContain("operation: 'replacement_admission'");
+		expect(entry).not.toContain('isInternalRestart');
 		expect(entry).not.toContain('JSON.stringify(payload ?? {})');
 		expect(entry).toContain("return doInstance.runFiber('flue:workflow:' + runId");
 		const workflowHttpBody = entry.slice(entry.indexOf('async function dispatchWorkflow'), entry.indexOf('async function dispatchAgent'));

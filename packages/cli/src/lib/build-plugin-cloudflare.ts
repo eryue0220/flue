@@ -197,7 +197,6 @@ import {
   createDispatchAgentHandler,
   reserveDispatchAgentSession,
   failRecoveredRun,
-  generateWorkflowRunId,
   configureFlueRuntime,
   createDefaultFlueApp,
   createDirectAgentHandler,
@@ -250,7 +249,7 @@ const workflowModules = {
 ${workflowModuleEntries}
 };
 const normalized = normalizeBuiltModules(agentModules, workflowModules);
-const { manifest, directHandlers, localAgentHandlers, createdAgents, dispatchAgentNames, websocketAgentHandlers, workflowHandlers, localWorkflowHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware } = normalized;
+const { manifest, directHandlers, localAgentHandlers, createdAgents, dispatchAgentNames, websocketAgentHandlers, workflowHandlers, websocketWorkflowHandlers, agentRouteMiddleware, agentWebSocketMiddleware, workflowRouteMiddleware, workflowWebSocketMiddleware } = normalized;
 const agentClassNames = {
 ${agentClassMapEntries}
 };
@@ -474,76 +473,24 @@ async function handleFlueDirectRecovered(ctx, doInstance, agentName) {
 async function handleFlueWorkflowFiberRecovered(ctx, doInstance, workflowName) {
   if (!ctx.name || ctx.name !== 'flue:workflow:' + doInstance.name) return;
   const interruptedRunId = doInstance.name;
-  const handler = localWorkflowHandlers[workflowName];
   const runStore = createRunStoreForRequest(doInstance);
   const run = await runStore.getRun(interruptedRunId);
   const events = await runStore.getEvents(interruptedRunId);
   const startEvent = events.find((event) => event.type === 'run_start');
   const payload = run?.payload !== undefined ? run.payload : startEvent?.payload;
-  const request = new Request('https://flue.invalid/workflows/' + encodeURIComponent(workflowName), { method: 'POST' });
-  if (!handler || payload === undefined) {
-    const error = new Error(!handler ? 'Flue workflow handler is unavailable during recovery; replacement admission was not attempted.' : 'Flue workflow recovery input is unavailable; replacement admission was not attempted.');
-    console.error('[flue:workflow-recovery]', { workflowName, interruptedRunId, operation: 'replacement_admission', outcome: 'restart_failed' }, error);
-    await failRecoveredRun({
-      label: workflowName,
-      owner: { kind: 'workflow', workflowName, instanceId: interruptedRunId },
-      id: interruptedRunId,
-      runId: interruptedRunId,
-      payload,
-      request,
-      error,
-      runStore,
-      runSubscribers,
-      runRegistry: createRunRegistryForRequest(doInstance.env),
-      createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
-    });
-    return;
-  }
-  const restartRunId = generateWorkflowRunId(workflowName);
-  try {
-    const binding = doInstance.env?.[workflowBindingNameFromWorkflowName(workflowName)];
-    if (!binding) throw new Error('Flue workflow restart binding unavailable after deployment.');
-    const stub = await getAgentByName(binding, restartRunId);
-    const response = await stub.fetch(new Request(request.url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-flue-restarted-from-run-id': interruptedRunId,
-      },
-      body: JSON.stringify(payload),
-    }));
-    if (!response.ok) throw new Error('Flue workflow restart admission failed after deployment: ' + response.status);
-    console.info('[flue:workflow-recovery]', { workflowName, interruptedRunId, replacementRunId: restartRunId, operation: 'replacement_admission', outcome: 'restart_admitted' });
-    await failRecoveredRun({
-      label: workflowName,
-      owner: { kind: 'workflow', workflowName, instanceId: interruptedRunId },
-      id: interruptedRunId,
-      runId: interruptedRunId,
-      payload,
-      request,
-      restartedAsRunId: restartRunId,
-      error: new Error('Flue workflow execution was interrupted and restarted as run "' + restartRunId + '".'),
-      runStore,
-      runSubscribers,
-      runRegistry: createRunRegistryForRequest(doInstance.env),
-      createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
-    });
-  } catch (error) {
-    console.error('[flue:workflow-recovery]', { workflowName, interruptedRunId, replacementRunId: restartRunId, operation: 'replacement_admission', outcome: 'restart_failed', retryable: error?.retryable, overloaded: error?.overloaded, remote: error?.remote }, error);
-    await failRecoveredRun({
-      label: workflowName,
-      owner: { kind: 'workflow', workflowName, instanceId: interruptedRunId },
-      id: interruptedRunId,
-      runId: interruptedRunId,
-      payload,
-      request,
-      error,
-      runStore,
-      runSubscribers,
-      runRegistry: createRunRegistryForRequest(doInstance.env),
-      createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
-    });
-  }
+  await failRecoveredRun({
+    label: workflowName,
+    owner: { kind: 'workflow', workflowName, instanceId: interruptedRunId },
+    id: interruptedRunId,
+    runId: interruptedRunId,
+    payload,
+    request: new Request('https://flue.invalid/workflows/' + encodeURIComponent(workflowName), { method: 'POST' }),
+    error: new Error('Flue workflow execution was interrupted. Start a new workflow run explicitly if retry is appropriate.'),
+    runStore,
+    runSubscribers,
+    runRegistry: createRunRegistryForRequest(doInstance.env),
+    createContext: (id_, recoveredRunId, payload, req, initialEventIndex) => createContextForRequest(id_, recoveredRunId, payload, doInstance, req, initialEventIndex),
+  });
 }
 
 // ─── Per-DO Dispatch ───────────────────────────────────────────────────────
@@ -608,8 +555,7 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
   }
 
   if (!parseWorkflowStart(request, workflowName)) return null;
-  const isInternalRestart = new URL(request.url).hostname === 'flue.invalid' && request.headers.has('x-flue-restarted-from-run-id');
-  const handler = isInternalRestart ? localWorkflowHandlers[workflowName] : workflowHandlers[workflowName];
+  const handler = workflowHandlers[workflowName];
   if (!handler) return null;
   const identity = workflowRuntimeIdentity(workflowName);
   return runWithInstanceContext(doInstance, identity, () => handleWorkflowRequest({
@@ -620,7 +566,6 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
       runStore: createRunStoreForRequest(doInstance),
       runSubscribers,
       runRegistry: createRunRegistryForRequest(doInstance.env),
-      restartedFromRunId: new URL(request.url).hostname === 'flue.invalid' ? request.headers.get('x-flue-restarted-from-run-id') || undefined : undefined,
       createContext: (id_, runId, payload, req, initialEventIndex, dispatchId) => createContextForRequest(id_, runId, payload, doInstance, req, initialEventIndex, dispatchId),
       startWorkflowAdmission: (runId, run) => {
         assertAgentsDurabilityApi(doInstance, 'runFiber');
