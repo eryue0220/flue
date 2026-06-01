@@ -10,6 +10,7 @@
 - **`--env` now selects one alternate environment file.** Repeated `--env` flags are rejected; combine values into one file or provide shell overrides instead.
 - **Cloudflare Durable Object migrations are now user-owned.** Flue still generates agent, workflow, and `FlueRegistry` classes and bindings, but no longer synthesizes or appends Wrangler migration entries. Existing deployments must copy the complete ordered `flue-class-*` migration history from their previously generated `.flue-vite.wrangler.jsonc` or built `wrangler.json` into the project-root Wrangler config before upgrading. Keep deployed tags unchanged, and append a uniquely tagged `new_sqlite_classes` entry whenever a new agent or workflow class is introduced.
 - **Dispatch persistence now stores one canonical agent name.** Internal dispatch records and `DispatchMessageMetadata` use `agent` without the redundant `targetAgent` field, and `SessionData.version` is now `4`. This beta cutover intentionally rejects persisted session data and Cloudflare dispatch Fiber metadata created by earlier Flue versions; clear old persisted state when upgrading.
+- **Testing-oriented runtime root exports were removed.** Import faux-provider helpers such as `registerFauxProvider(...)`, `fauxAssistantMessage(...)`, `fauxText(...)`, and `fauxToolCall(...)` directly from `@earendil-works/pi-ai`. The internal tool-assembly helpers `createTools(...)` and `BUILTIN_TOOL_NAMES` are no longer exported from `@flue/runtime`.
 
 ### Fixes & Other Changes
 

@@ -1,5 +1,9 @@
 ---
-{ 'category': 'sandbox', 'website': 'https://smolmachines.com', 'aliases': ['smolvm-embedded'] }
+{
+  "category": "sandbox",
+  "website": "https://smolmachines.com",
+  "aliases": ["smolvm-embedded"]
+}
 ---
 
 # Add a Flue Connector: smolvm
@@ -42,7 +46,7 @@ Create any missing parent directories.
 Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxApi` contract, and the shell quoting in particular is load-bearing.
 
-````ts
+```ts
 /**
  * smolvm connector for Flue.
  *
@@ -75,7 +79,7 @@ import type { Machine } from 'smolvm-embedded';
  * Quote a string for safe inclusion in a `sh -lc` command.
  */
 function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 /**
@@ -85,74 +89,76 @@ function shellQuote(value: string): string {
  * Directory operations fall back to POSIX shell commands via `exec()`.
  */
 class SmolvmSandboxApi implements SandboxApi {
-  constructor(private machine: Machine) {}
+	constructor(private machine: Machine) {}
 
-  async readFile(path: string): Promise<string> {
-    const buf = await this.machine.readFile(path);
-    return buf.toString('utf-8');
-  }
+	async readFile(path: string): Promise<string> {
+		const buf = await this.machine.readFile(path);
+		return buf.toString('utf-8');
+	}
 
-  async readFileBuffer(path: string): Promise<Uint8Array> {
-    // Node Buffer is a Uint8Array subclass — return it directly.
-    return this.machine.readFile(path);
-  }
+	async readFileBuffer(path: string): Promise<Uint8Array> {
+		// Node Buffer is a Uint8Array subclass — return it directly.
+		return this.machine.readFile(path);
+	}
 
-  async writeFile(path: string, content: string | Uint8Array): Promise<void> {
-    await this.machine.writeFile(path, content);
-  }
+	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+		await this.machine.writeFile(path, content);
+	}
 
-  async stat(path: string): Promise<FileStat> {
-    const r = await this.exec(`stat -c '%F|%s|%Y' ${shellQuote(path)}`);
-    if (r.exitCode !== 0) throw new Error(`[flue:smolvm] stat ${path}: ${r.stderr}`);
-    const [type = '', size = '0', mtime = '0'] = r.stdout.trim().split('|');
-    return {
-      isFile: type.startsWith('regular'),
-      isDirectory: type === 'directory',
-      isSymbolicLink: type === 'symbolic link',
-      size: Number.parseInt(size, 10) || 0,
-      mtime: new Date((Number.parseInt(mtime, 10) || 0) * 1000),
-    };
-  }
+	async stat(path: string): Promise<FileStat> {
+		const r = await this.exec(`stat -c '%F|%s|%Y' ${shellQuote(path)}`);
+		if (r.exitCode !== 0) throw new Error(`[flue:smolvm] stat ${path}: ${r.stderr}`);
+		const [type = '', size = '0', mtime = '0'] = r.stdout.trim().split('|');
+		return {
+			isFile: type.startsWith('regular'),
+			isDirectory: type === 'directory',
+			isSymbolicLink: type === 'symbolic link',
+			size: Number.parseInt(size, 10) || 0,
+			mtime: new Date((Number.parseInt(mtime, 10) || 0) * 1000),
+		};
+	}
 
-  async readdir(path: string): Promise<string[]> {
-    const r = await this.exec(`ls -A1 ${shellQuote(path)}`);
-    if (r.exitCode !== 0) throw new Error(`[flue:smolvm] readdir ${path}: ${r.stderr}`);
-    return r.stdout.split('\n').filter(Boolean);
-  }
+	async readdir(path: string): Promise<string[]> {
+		const r = await this.exec(`ls -A1 ${shellQuote(path)}`);
+		if (r.exitCode !== 0) throw new Error(`[flue:smolvm] readdir ${path}: ${r.stderr}`);
+		return r.stdout.split('\n').filter(Boolean);
+	}
 
-  async exists(path: string): Promise<boolean> {
-    return (await this.exec(`test -e ${shellQuote(path)}`)).exitCode === 0;
-  }
+	async exists(path: string): Promise<boolean> {
+		return (await this.exec(`test -e ${shellQuote(path)}`)).exitCode === 0;
+	}
 
-  async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
-    const r = await this.exec(`mkdir ${options?.recursive ? '-p ' : ''}${shellQuote(path)}`);
-    if (r.exitCode !== 0) throw new Error(`[flue:smolvm] mkdir ${path}: ${r.stderr}`);
-  }
+	async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
+		const r = await this.exec(
+			`mkdir ${options?.recursive ? '-p ' : ''}${shellQuote(path)}`,
+		);
+		if (r.exitCode !== 0) throw new Error(`[flue:smolvm] mkdir ${path}: ${r.stderr}`);
+	}
 
-  async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
-    const flags = `${options?.recursive ? 'r' : ''}${options?.force ? 'f' : ''}`;
-    const r = await this.exec(`rm ${flags ? `-${flags} ` : ''}${shellQuote(path)}`);
-    if (r.exitCode !== 0) throw new Error(`[flue:smolvm] rm ${path}: ${r.stderr}`);
-  }
+	async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+		const flags = `${options?.recursive ? 'r' : ''}${options?.force ? 'f' : ''}`;
+		const r = await this.exec(`rm ${flags ? `-${flags} ` : ''}${shellQuote(path)}`);
+		if (r.exitCode !== 0) throw new Error(`[flue:smolvm] rm ${path}: ${r.stderr}`);
+	}
 
-  async exec(
-    command: string,
-    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    // smolvm's `exec` takes argv (no shell parsing), so wrap in `sh -lc`
-    // so users can pass shell commands the way Flue's other connectors
-    // accept them. The SDK takes timeout in seconds, matching Flue's spec.
-    const result = await this.machine.exec(['sh', '-lc', command], {
-      workdir: options?.cwd,
-      env: options?.env,
-      timeout: options?.timeout,
-    });
-    return {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-    };
-  }
+	async exec(
+		command: string,
+		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		// smolvm's `exec` takes argv (no shell parsing), so wrap in `sh -lc`
+		// so users can pass shell commands the way Flue's other connectors
+		// accept them. The SDK takes timeout in seconds, matching Flue's spec.
+		const result = await this.machine.exec(['sh', '-lc', command], {
+			workdir: options?.cwd,
+			env: options?.env,
+			timeout: options?.timeout,
+		});
+		return {
+			stdout: result.stdout,
+			stderr: result.stderr,
+			exitCode: result.exitCode,
+		};
+	}
 }
 
 /**
@@ -161,15 +167,15 @@ class SmolvmSandboxApi implements SandboxApi {
  * for agent use.
  */
 export function smolvm(machine: Machine): SandboxFactory {
-  return {
-    async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
-      const sandboxCwd = cwd ?? '/workspace';
-      const api = new SmolvmSandboxApi(machine);
-      return createSandboxSessionEnv(api, sandboxCwd);
-    },
-  };
+	return {
+		async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
+			const sandboxCwd = cwd ?? '/workspace';
+			const api = new SmolvmSandboxApi(machine);
+			return createSandboxSessionEnv(api, sandboxCwd);
+		},
+	};
 }
-````
+```
 
 ## Required dependencies
 
@@ -228,8 +234,8 @@ The user owns the machine's lifetime. Stop or delete it explicitly when
 done:
 
 ```ts
-await machine.stop(); // graceful shutdown, storage preserved
-await machine.delete(); // stop + remove all storage
+await machine.stop();    // graceful shutdown, storage preserved
+await machine.delete();  // stop + remove all storage
 ```
 
 The connector **never** calls `delete()` on the user's behalf.
@@ -248,7 +254,7 @@ import { smolvm } from '../connectors/smolvm'; // adjust path to match the user'
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
-export async function run({ init }: FlueContext) {
+export async function run ({ init }: FlueContext) {
   const machine = await Machine.create({ name: `flue-${Date.now()}` });
 
   const agent = createAgent(() => ({

@@ -1,8 +1,8 @@
 ---
 {
-  'category': 'sandbox',
-  'website': 'https://developers.cloudflare.com/sandbox',
-  'aliases': ['@cloudflare/sandbox'],
+  "category": "sandbox",
+  "website": "https://developers.cloudflare.com/sandbox",
+  "aliases": ["@cloudflare/sandbox"]
 }
 ---
 
@@ -85,10 +85,10 @@ The short version, for your reference:
    ```jsonc
    {
      "durable_objects": {
-       "bindings": [{ "class_name": "Sandbox", "name": "Sandbox" }],
+       "bindings": [{ "class_name": "Sandbox", "name": "Sandbox" }]
      },
      "migrations": [{ "tag": "v2", "new_sqlite_classes": ["Sandbox"] }],
-     "containers": [{ "class_name": "Sandbox", "image": "./Dockerfile" }],
+     "containers": [{ "class_name": "Sandbox", "image": "./Dockerfile" }]
    }
    ```
 
@@ -116,7 +116,7 @@ The short version, for your reference:
 
    export const route: WorkflowRouteHandler = async (_c, next) => next();
 
-   export async function run({ init, id, env, payload }: FlueContext) {
+   export async function run ({ init, id, env, payload }: FlueContext) {
      const sandbox = getSandbox(env.Sandbox, id);
      const agent = createAgent(() => ({ sandbox, model: 'anthropic/claude-opus-4-7' }));
      const harness = await init(agent);
@@ -133,7 +133,7 @@ The short version, for your reference:
 
 5. Tell the user to put local variables in `.dev.vars` or `.env` and run
    `flue dev --target cloudflare`, then `flue build --target cloudflare &&
-wrangler deploy --secrets-file .env` to deploy. No new env vars are required just for
+   wrangler deploy --secrets-file .env` to deploy. No new env vars are required just for
    the sandbox itself; auth is the user's normal Cloudflare account auth
    via `wrangler login`.
 

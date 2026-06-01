@@ -1,5 +1,9 @@
 ---
-{ 'category': 'sandbox', 'website': 'https://boxd.sh', 'aliases': ['@boxd-sh/sdk'] }
+{
+  "category": "sandbox",
+  "website": "https://boxd.sh",
+  "aliases": ["@boxd-sh/sdk"]
+}
 ---
 
 # Add a Flue Connector: boxd
@@ -33,7 +37,7 @@ Create any missing parent directories.
 Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxApi` contract.
 
-````ts
+```ts
 /**
  * boxd connector for Flue.
  *
@@ -58,19 +62,19 @@ import type { SandboxApi, SandboxFactory, SessionEnv, FileStat } from '@flue/run
 import type { Box as BoxdBox } from '@boxd-sh/sdk';
 
 export interface BoxdConnectorOptions {
-  /**
-   * Default working directory for `exec()` calls when one isn't supplied
-   * per-call. Defaults to `/home/boxd` (the boxd VM default user's home).
-   */
-  cwd?: string;
-  /**
-   * How long to wait for the in-VM exec endpoint to come up before the
-   * first command, in milliseconds. boxd's `box.create()` returns once
-   * the VM is scheduled, but the agent inside it can take a moment more
-   * before exec calls succeed. Defaults to 30000 (30s); set to 0 to skip
-   * the probe entirely (useful when reusing a box you know is warm).
-   */
-  readyTimeoutMs?: number;
+	/**
+	 * Default working directory for `exec()` calls when one isn't supplied
+	 * per-call. Defaults to `/home/boxd` (the boxd VM default user's home).
+	 */
+	cwd?: string;
+	/**
+	 * How long to wait for the in-VM exec endpoint to come up before the
+	 * first command, in milliseconds. boxd's `box.create()` returns once
+	 * the VM is scheduled, but the agent inside it can take a moment more
+	 * before exec calls succeed. Defaults to 30000 (30s); set to 0 to skip
+	 * the probe entirely (useful when reusing a box you know is warm).
+	 */
+	readyTimeoutMs?: number;
 }
 
 /**
@@ -80,29 +84,29 @@ export interface BoxdConnectorOptions {
  * warm box (single successful probe) and throws on timeout.
  */
 async function waitForReady(box: BoxdBox, timeoutMs: number): Promise<void> {
-  if (timeoutMs <= 0) return;
-  const deadline = Date.now() + timeoutMs;
-  let lastErr: unknown;
-  while (Date.now() < deadline) {
-    try {
-      const probe = await box.exec(['true']);
-      if (probe.exitCode === 0) return;
-    } catch (err) {
-      lastErr = err;
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(
-    `[flue:boxd] VM ${box.name} did not become ready within ${timeoutMs}ms` +
-      (lastErr ? `: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}` : ''),
-  );
+	if (timeoutMs <= 0) return;
+	const deadline = Date.now() + timeoutMs;
+	let lastErr: unknown;
+	while (Date.now() < deadline) {
+		try {
+			const probe = await box.exec(['true']);
+			if (probe.exitCode === 0) return;
+		} catch (err) {
+			lastErr = err;
+		}
+		await new Promise((r) => setTimeout(r, 500));
+	}
+	throw new Error(
+		`[flue:boxd] VM ${box.name} did not become ready within ${timeoutMs}ms` +
+			(lastErr ? `: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}` : ''),
+	);
 }
 
 /**
  * Quote a string for safe inclusion in a `bash -c` command.
  */
 function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 /**
@@ -115,99 +119,108 @@ function shellQuote(value: string): string {
  * via shell commands, the same pattern the Daytona connector uses.
  */
 class BoxdSandboxApi implements SandboxApi {
-  constructor(private box: BoxdBox) {}
+	constructor(private box: BoxdBox) {}
 
-  async readFile(path: string): Promise<string> {
-    const bytes = await this.box.readFile(path);
-    return new TextDecoder('utf-8').decode(bytes);
-  }
+	async readFile(path: string): Promise<string> {
+		const bytes = await this.box.readFile(path);
+		return new TextDecoder('utf-8').decode(bytes);
+	}
 
-  async readFileBuffer(path: string): Promise<Uint8Array> {
-    return this.box.readFile(path);
-  }
+	async readFileBuffer(path: string): Promise<Uint8Array> {
+		return this.box.readFile(path);
+	}
 
-  async writeFile(path: string, content: string | Uint8Array): Promise<void> {
-    await this.box.writeFile(path, content);
-  }
+	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+		await this.box.writeFile(path, content);
+	}
 
-  async stat(path: string): Promise<FileStat> {
-    // `stat -c` is GNU stat (default on the boxd Ubuntu image). Format:
-    //   <type>|<size>|<mtime-epoch>
-    const result = await this.runShell(`stat -c '%F|%s|%Y' ${shellQuote(path)}`);
-    if (result.exitCode !== 0) {
-      throw new Error(`[flue:boxd] stat failed for ${path}: ${result.stdout || result.stderr}`);
-    }
-    const [type = '', sizeStr = '0', mtimeStr = '0'] = result.stdout.trim().split('|');
-    const size = Number.parseInt(sizeStr, 10);
-    const mtimeSecs = Number.parseInt(mtimeStr, 10);
-    return {
-      isFile: type === 'regular file' || type === 'regular empty file',
-      isDirectory: type === 'directory',
-      isSymbolicLink: type === 'symbolic link',
-      size: Number.isFinite(size) ? size : 0,
-      mtime: new Date((Number.isFinite(mtimeSecs) ? mtimeSecs : 0) * 1000),
-    };
-  }
+	async stat(path: string): Promise<FileStat> {
+		// `stat -c` is GNU stat (default on the boxd Ubuntu image). Format:
+		//   <type>|<size>|<mtime-epoch>
+		const result = await this.runShell(
+			`stat -c '%F|%s|%Y' ${shellQuote(path)}`,
+		);
+		if (result.exitCode !== 0) {
+			throw new Error(`[flue:boxd] stat failed for ${path}: ${result.stdout || result.stderr}`);
+		}
+		const [type = '', sizeStr = '0', mtimeStr = '0'] = result.stdout.trim().split('|');
+		const size = Number.parseInt(sizeStr, 10);
+		const mtimeSecs = Number.parseInt(mtimeStr, 10);
+		return {
+			isFile: type === 'regular file' || type === 'regular empty file',
+			isDirectory: type === 'directory',
+			isSymbolicLink: type === 'symbolic link',
+			size: Number.isFinite(size) ? size : 0,
+			mtime: new Date((Number.isFinite(mtimeSecs) ? mtimeSecs : 0) * 1000),
+		};
+	}
 
-  async readdir(path: string): Promise<string[]> {
-    // `ls -A` excludes `.` and `..` but lists dotfiles. `-1` forces one
-    // entry per line so we don't have to parse columns.
-    const result = await this.runShell(`ls -A1 ${shellQuote(path)}`);
-    if (result.exitCode !== 0) {
-      throw new Error(`[flue:boxd] readdir failed for ${path}: ${result.stdout || result.stderr}`);
-    }
-    return result.stdout.split('\n').filter((line) => line.length > 0);
-  }
+	async readdir(path: string): Promise<string[]> {
+		// `ls -A` excludes `.` and `..` but lists dotfiles. `-1` forces one
+		// entry per line so we don't have to parse columns.
+		const result = await this.runShell(`ls -A1 ${shellQuote(path)}`);
+		if (result.exitCode !== 0) {
+			throw new Error(
+				`[flue:boxd] readdir failed for ${path}: ${result.stdout || result.stderr}`,
+			);
+		}
+		return result.stdout.split('\n').filter((line) => line.length > 0);
+	}
 
-  async exists(path: string): Promise<boolean> {
-    const result = await this.runShell(`test -e ${shellQuote(path)}`);
-    return result.exitCode === 0;
-  }
+	async exists(path: string): Promise<boolean> {
+		const result = await this.runShell(`test -e ${shellQuote(path)}`);
+		return result.exitCode === 0;
+	}
 
-  async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
-    const cmd = options?.recursive ? `mkdir -p ${shellQuote(path)}` : `mkdir ${shellQuote(path)}`;
-    const result = await this.runShell(cmd);
-    if (result.exitCode !== 0) {
-      throw new Error(`[flue:boxd] mkdir failed for ${path}: ${result.stdout || result.stderr}`);
-    }
-  }
+	async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
+		const cmd = options?.recursive
+			? `mkdir -p ${shellQuote(path)}`
+			: `mkdir ${shellQuote(path)}`;
+		const result = await this.runShell(cmd);
+		if (result.exitCode !== 0) {
+			throw new Error(`[flue:boxd] mkdir failed for ${path}: ${result.stdout || result.stderr}`);
+		}
+	}
 
-  async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
-    const flags: string[] = [];
-    if (options?.recursive) flags.push('-r');
-    if (options?.force) flags.push('-f');
-    const flagStr = flags.length ? `${flags.join('')} ` : '';
-    const result = await this.runShell(`rm ${flagStr}${shellQuote(path)}`);
-    if (result.exitCode !== 0) {
-      throw new Error(`[flue:boxd] rm failed for ${path}: ${result.stdout || result.stderr}`);
-    }
-  }
+	async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+		const flags: string[] = [];
+		if (options?.recursive) flags.push('-r');
+		if (options?.force) flags.push('-f');
+		const flagStr = flags.length ? `${flags.join('')} ` : '';
+		const result = await this.runShell(`rm ${flagStr}${shellQuote(path)}`);
+		if (result.exitCode !== 0) {
+			throw new Error(`[flue:boxd] rm failed for ${path}: ${result.stdout || result.stderr}`);
+		}
+	}
 
-  async exec(
-    command: string,
-    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    return this.runShell(command, options);
-  }
+	async exec(
+		command: string,
+		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		return this.runShell(command, options);
+	}
 
-  private async runShell(
-    command: string,
-    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const wrapped = options?.cwd ? `cd ${shellQuote(options.cwd)} && ${command}` : command;
-    // Flue passes `timeout` in seconds (per the connector spec); boxd
-    // expects milliseconds.
-    const timeoutMs = typeof options?.timeout === 'number' ? options.timeout * 1000 : undefined;
-    const result = await this.box.exec(['bash', '-lc', wrapped], {
-      env: options?.env,
-      timeoutMs,
-    });
-    return {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-    };
-  }
+	private async runShell(
+		command: string,
+		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		const wrapped = options?.cwd
+			? `cd ${shellQuote(options.cwd)} && ${command}`
+			: command;
+		// Flue passes `timeout` in seconds (per the connector spec); boxd
+		// expects milliseconds.
+		const timeoutMs =
+			typeof options?.timeout === 'number' ? options.timeout * 1000 : undefined;
+		const result = await this.box.exec(['bash', '-lc', wrapped], {
+			env: options?.env,
+			timeoutMs,
+		});
+		return {
+			stdout: result.stdout,
+			stderr: result.stderr,
+			exitCode: result.exitCode,
+		};
+	}
 }
 
 /**
@@ -216,19 +229,19 @@ class BoxdSandboxApi implements SandboxApi {
  * for agent use.
  */
 export function boxd(box: BoxdBox, options?: BoxdConnectorOptions): SandboxFactory {
-  let readyPromise: Promise<void> | undefined;
-  return {
-    async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
-      const sandboxCwd = cwd ?? options?.cwd ?? '/home/boxd';
-      // Probe once per box, not once per session.
-      readyPromise ??= waitForReady(box, options?.readyTimeoutMs ?? 30_000);
-      await readyPromise;
-      const api = new BoxdSandboxApi(box);
-      return createSandboxSessionEnv(api, sandboxCwd);
-    },
-  };
+	let readyPromise: Promise<void> | undefined;
+	return {
+		async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
+			const sandboxCwd = cwd ?? options?.cwd ?? '/home/boxd';
+			// Probe once per box, not once per session.
+			readyPromise ??= waitForReady(box, options?.readyTimeoutMs ?? 30_000);
+			await readyPromise;
+			const api = new BoxdSandboxApi(box);
+			return createSandboxSessionEnv(api, sandboxCwd);
+		},
+	};
 }
-````
+```
 
 ## Required dependencies
 
@@ -275,7 +288,7 @@ import { boxd } from '../connectors/boxd'; // adjust path to match the user's la
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
-export async function run({ init, env }: FlueContext) {
+export async function run ({ init, env }: FlueContext) {
   const client = new Compute({ apiKey: env.BOXD_API_KEY });
   const box = await client.box.create({ name: `agent-${Date.now()}` });
 

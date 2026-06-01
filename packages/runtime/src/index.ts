@@ -1,14 +1,7 @@
 /// <reference path="../types/skill-md.d.ts" />
 /// <reference path="../types/markdown-md.d.ts" />
 
-export {
-	fauxAssistantMessage,
-	fauxText,
-	fauxToolCall,
-	registerFauxProvider,
-	Type,
-} from '@earendil-works/pi-ai';
-export { BUILTIN_TOOL_NAMES, createTools } from './agent.ts';
+export { Type } from '@earendil-works/pi-ai';
 export { createAgent, defineAgentProfile } from './agent-definition.ts';
 export type { McpServerConnection, McpServerOptions, McpTransport } from './mcp.ts';
 export { connectMcpServer } from './mcp.ts';
@@ -91,8 +84,8 @@ export type {
 	ToolParameters,
 	WebSocketErrorMessage,
 	WebSocketServerMessage,
-	WorkflowRunWebSocketErrorMessage,
 	WorkflowRouteHandler,
+	WorkflowRunWebSocketErrorMessage,
 	WorkflowWebSocketClientMessage,
 	WorkflowWebSocketHandler,
 	WorkflowWebSocketServerMessage,

@@ -1,5 +1,8 @@
 ---
-{ 'category': 'sandbox', 'website': 'https://e2b.dev' }
+{
+  "category": "sandbox",
+  "website": "https://e2b.dev"
+}
 ---
 
 # Add a Flue Connector: E2B
@@ -38,7 +41,7 @@ Create any missing parent directories.
 Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxApi` contract.
 
-````ts
+```ts
 /**
  * E2B connector for Flue.
  *
@@ -76,82 +79,82 @@ import type { Sandbox as E2BSandbox } from 'e2b';
  * connector spec) so we multiply.
  */
 class E2BSandboxApi implements SandboxApi {
-  constructor(private sandbox: E2BSandbox) {}
+	constructor(private sandbox: E2BSandbox) {}
 
-  async readFile(path: string): Promise<string> {
-    return this.sandbox.files.read(path);
-  }
+	async readFile(path: string): Promise<string> {
+		return this.sandbox.files.read(path);
+	}
 
-  async readFileBuffer(path: string): Promise<Uint8Array> {
-    return this.sandbox.files.read(path, { format: 'bytes' });
-  }
+	async readFileBuffer(path: string): Promise<Uint8Array> {
+		return this.sandbox.files.read(path, { format: 'bytes' });
+	}
 
-  async writeFile(path: string, content: string | Uint8Array): Promise<void> {
-    // E2B accepts string | ArrayBuffer | Blob | ReadableStream. A
-    // Uint8Array's underlying ArrayBuffer is the right shape, but slice
-    // to its actual byteLength in case the buffer is a larger pool.
-    if (typeof content === 'string') {
-      await this.sandbox.files.write(path, content);
-    } else {
-      const ab = content.buffer.slice(
-        content.byteOffset,
-        content.byteOffset + content.byteLength,
-      ) as ArrayBuffer;
-      await this.sandbox.files.write(path, ab);
-    }
-  }
+	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+		// E2B accepts string | ArrayBuffer | Blob | ReadableStream. A
+		// Uint8Array's underlying ArrayBuffer is the right shape, but slice
+		// to its actual byteLength in case the buffer is a larger pool.
+		if (typeof content === 'string') {
+			await this.sandbox.files.write(path, content);
+		} else {
+			const ab = content.buffer.slice(
+				content.byteOffset,
+				content.byteOffset + content.byteLength,
+			) as ArrayBuffer;
+			await this.sandbox.files.write(path, ab);
+		}
+	}
 
-  async stat(path: string): Promise<FileStat> {
-    const info = await this.sandbox.files.getInfo(path);
-    const isDirectory = info.type === 'dir';
-    return {
-      isFile: info.type === 'file',
-      isDirectory,
-      isSymbolicLink: typeof info.symlinkTarget === 'string' && info.symlinkTarget.length > 0,
-      size: info.size ?? 0,
-      mtime: info.modifiedTime ?? new Date(),
-    };
-  }
+	async stat(path: string): Promise<FileStat> {
+		const info = await this.sandbox.files.getInfo(path);
+		const isDirectory = info.type === 'dir';
+		return {
+			isFile: info.type === 'file',
+			isDirectory,
+			isSymbolicLink: typeof info.symlinkTarget === 'string' && info.symlinkTarget.length > 0,
+			size: info.size ?? 0,
+			mtime: info.modifiedTime ?? new Date(),
+		};
+	}
 
-  async readdir(path: string): Promise<string[]> {
-    const entries = await this.sandbox.files.list(path);
-    return entries.map((e) => e.name);
-  }
+	async readdir(path: string): Promise<string[]> {
+		const entries = await this.sandbox.files.list(path);
+		return entries.map((e) => e.name);
+	}
 
-  async exists(path: string): Promise<boolean> {
-    return this.sandbox.files.exists(path);
-  }
+	async exists(path: string): Promise<boolean> {
+		return this.sandbox.files.exists(path);
+	}
 
-  async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
-    // E2B's makeDir creates parents along the way unconditionally, so
-    // the `recursive` option doesn't change behavior here.
-    await this.sandbox.files.makeDir(path);
-  }
+	async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
+		// E2B's makeDir creates parents along the way unconditionally, so
+		// the `recursive` option doesn't change behavior here.
+		await this.sandbox.files.makeDir(path);
+	}
 
-  async rm(path: string, _options?: { recursive?: boolean; force?: boolean }): Promise<void> {
-    // E2B's remove() takes no flags — it removes whatever is at the
-    // path. The `force` option is implicitly satisfied (no error on
-    // missing paths is not guaranteed, but most callers wrap in a
-    // safety net anyway).
-    await this.sandbox.files.remove(path);
-  }
+	async rm(path: string, _options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+		// E2B's remove() takes no flags — it removes whatever is at the
+		// path. The `force` option is implicitly satisfied (no error on
+		// missing paths is not guaranteed, but most callers wrap in a
+		// safety net anyway).
+		await this.sandbox.files.remove(path);
+	}
 
-  async exec(
-    command: string,
-    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const result = await this.sandbox.commands.run(command, {
-      cwd: options?.cwd,
-      envs: options?.env,
-      // Flue passes timeout in seconds; E2B expects milliseconds.
-      timeoutMs: typeof options?.timeout === 'number' ? options.timeout * 1000 : undefined,
-    });
-    return {
-      stdout: result.stdout ?? '',
-      stderr: result.stderr ?? '',
-      exitCode: result.exitCode ?? 0,
-    };
-  }
+	async exec(
+		command: string,
+		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		const result = await this.sandbox.commands.run(command, {
+			cwd: options?.cwd,
+			envs: options?.env,
+			// Flue passes timeout in seconds; E2B expects milliseconds.
+			timeoutMs: typeof options?.timeout === 'number' ? options.timeout * 1000 : undefined,
+		});
+		return {
+			stdout: result.stdout ?? '',
+			stderr: result.stderr ?? '',
+			exitCode: result.exitCode ?? 0,
+		};
+	}
 }
 
 /**
@@ -160,18 +163,18 @@ class E2BSandboxApi implements SandboxApi {
  * for agent use.
  */
 export function e2b(sandbox: E2BSandbox): SandboxFactory {
-  return {
-    async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
-      // The E2B base template's default user is `user` with home
-      // directory /home/user. Sessions inherit this unless the caller
-      // overrides cwd.
-      const sandboxCwd = cwd ?? '/home/user';
-      const api = new E2BSandboxApi(sandbox);
-      return createSandboxSessionEnv(api, sandboxCwd);
-    },
-  };
+	return {
+		async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
+			// The E2B base template's default user is `user` with home
+			// directory /home/user. Sessions inherit this unless the caller
+			// overrides cwd.
+			const sandboxCwd = cwd ?? '/home/user';
+			const api = new E2BSandboxApi(sandbox);
+			return createSandboxSessionEnv(api, sandboxCwd);
+		},
+	};
 }
-````
+```
 
 ## Required dependencies
 
@@ -221,7 +224,7 @@ import { e2b } from '../connectors/e2b'; // adjust path to match the user's layo
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
-export async function run({ init }: FlueContext) {
+export async function run ({ init }: FlueContext) {
   // E2B reads E2B_API_KEY from the environment automatically.
   const sandbox = await Sandbox.create();
 

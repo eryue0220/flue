@@ -1,5 +1,8 @@
 ---
-{ 'category': 'sandbox', 'website': 'https://modal.com' }
+{
+  "category": "sandbox",
+  "website": "https://modal.com"
+}
 ---
 
 # Add a Flue Connector: Modal
@@ -43,7 +46,7 @@ Create any missing parent directories.
 Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxApi` contract.
 
-````ts
+```ts
 /**
  * Modal connector for Flue.
  *
@@ -71,21 +74,21 @@ import type { SandboxApi, SandboxFactory, SessionEnv, FileStat } from '@flue/run
 import type { Sandbox as ModalSandbox } from 'modal';
 
 export interface ModalConnectorOptions {
-  /**
-   * Default working directory for `exec()` calls when the caller doesn't
-   * pass one. Modal sandboxes don't have a strict notion of a "default
-   * cwd" — it's whatever the underlying image's WORKDIR is — so this is
-   * also the value Flue uses to resolve relative paths in the session.
-   * Defaults to "/".
-   */
-  cwd?: string;
+	/**
+	 * Default working directory for `exec()` calls when the caller doesn't
+	 * pass one. Modal sandboxes don't have a strict notion of a "default
+	 * cwd" — it's whatever the underlying image's WORKDIR is — so this is
+	 * also the value Flue uses to resolve relative paths in the session.
+	 * Defaults to "/".
+	 */
+	cwd?: string;
 }
 
 /**
  * Quote a string for safe inclusion in a `bash -lc` command.
  */
 function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 /**
@@ -97,139 +100,144 @@ function shellQuote(value: string): string {
  * `bash -lc` shell-outs. This is the same pattern the boxd connector uses.
  */
 class ModalSandboxApi implements SandboxApi {
-  constructor(private sandbox: ModalSandbox) {}
+	constructor(private sandbox: ModalSandbox) {}
 
-  async readFile(path: string): Promise<string> {
-    const handle = await this.sandbox.open(path, 'r');
-    try {
-      const bytes = await handle.read();
-      return new TextDecoder('utf-8').decode(bytes);
-    } finally {
-      await handle.close();
-    }
-  }
+	async readFile(path: string): Promise<string> {
+		const handle = await this.sandbox.open(path, 'r');
+		try {
+			const bytes = await handle.read();
+			return new TextDecoder('utf-8').decode(bytes);
+		} finally {
+			await handle.close();
+		}
+	}
 
-  async readFileBuffer(path: string): Promise<Uint8Array> {
-    const handle = await this.sandbox.open(path, 'r');
-    try {
-      return await handle.read();
-    } finally {
-      await handle.close();
-    }
-  }
+	async readFileBuffer(path: string): Promise<Uint8Array> {
+		const handle = await this.sandbox.open(path, 'r');
+		try {
+			return await handle.read();
+		} finally {
+			await handle.close();
+		}
+	}
 
-  async writeFile(path: string, content: string | Uint8Array): Promise<void> {
-    const handle = await this.sandbox.open(path, 'w');
-    try {
-      const data = typeof content === 'string' ? new TextEncoder().encode(content) : content;
-      await handle.write(data);
-      await handle.flush();
-    } finally {
-      await handle.close();
-    }
-  }
+	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+		const handle = await this.sandbox.open(path, 'w');
+		try {
+			const data =
+				typeof content === 'string' ? new TextEncoder().encode(content) : content;
+			await handle.write(data);
+			await handle.flush();
+		} finally {
+			await handle.close();
+		}
+	}
 
-  async stat(path: string): Promise<FileStat> {
-    // Try GNU stat first (works on Debian/Ubuntu/python:3.13-slim).
-    // Fall back to BusyBox stat (Alpine). The format string differs:
-    //   GNU:     %F gives "regular file" / "directory" / "symbolic link"
-    //   BusyBox: %F gives the same words but is positional only with `-c`.
-    // Both implementations accept `stat -c '%F|%s|%Y' <path>`.
-    const result = await this.runShell(`stat -c '%F|%s|%Y' ${shellQuote(path)} 2>/dev/null`);
-    if (result.exitCode !== 0 || !result.stdout.trim()) {
-      throw new Error(
-        `[flue:modal] stat failed for ${path}: ` +
-          (result.stderr || result.stdout || `exit ${result.exitCode}`),
-      );
-    }
-    const [type = '', sizeStr = '0', mtimeStr = '0'] = result.stdout.trim().split('|');
-    const size = Number.parseInt(sizeStr, 10);
-    const mtimeSecs = Number.parseInt(mtimeStr, 10);
-    return {
-      isFile: type === 'regular file' || type === 'regular empty file',
-      isDirectory: type === 'directory',
-      isSymbolicLink: type === 'symbolic link',
-      size: Number.isFinite(size) ? size : 0,
-      mtime: new Date((Number.isFinite(mtimeSecs) ? mtimeSecs : 0) * 1000),
-    };
-  }
+	async stat(path: string): Promise<FileStat> {
+		// Try GNU stat first (works on Debian/Ubuntu/python:3.13-slim).
+		// Fall back to BusyBox stat (Alpine). The format string differs:
+		//   GNU:     %F gives "regular file" / "directory" / "symbolic link"
+		//   BusyBox: %F gives the same words but is positional only with `-c`.
+		// Both implementations accept `stat -c '%F|%s|%Y' <path>`.
+		const result = await this.runShell(
+			`stat -c '%F|%s|%Y' ${shellQuote(path)} 2>/dev/null`,
+		);
+		if (result.exitCode !== 0 || !result.stdout.trim()) {
+			throw new Error(
+				`[flue:modal] stat failed for ${path}: ` +
+					(result.stderr || result.stdout || `exit ${result.exitCode}`),
+			);
+		}
+		const [type = '', sizeStr = '0', mtimeStr = '0'] = result.stdout.trim().split('|');
+		const size = Number.parseInt(sizeStr, 10);
+		const mtimeSecs = Number.parseInt(mtimeStr, 10);
+		return {
+			isFile: type === 'regular file' || type === 'regular empty file',
+			isDirectory: type === 'directory',
+			isSymbolicLink: type === 'symbolic link',
+			size: Number.isFinite(size) ? size : 0,
+			mtime: new Date((Number.isFinite(mtimeSecs) ? mtimeSecs : 0) * 1000),
+		};
+	}
 
-  async readdir(path: string): Promise<string[]> {
-    // `ls -A1` excludes . and .. but lists dotfiles, one per line.
-    const result = await this.runShell(`ls -A1 ${shellQuote(path)}`);
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `[flue:modal] readdir failed for ${path}: ` +
-          (result.stderr || result.stdout || `exit ${result.exitCode}`),
-      );
-    }
-    return result.stdout.split('\n').filter((line) => line.length > 0);
-  }
+	async readdir(path: string): Promise<string[]> {
+		// `ls -A1` excludes . and .. but lists dotfiles, one per line.
+		const result = await this.runShell(`ls -A1 ${shellQuote(path)}`);
+		if (result.exitCode !== 0) {
+			throw new Error(
+				`[flue:modal] readdir failed for ${path}: ` +
+					(result.stderr || result.stdout || `exit ${result.exitCode}`),
+			);
+		}
+		return result.stdout.split('\n').filter((line) => line.length > 0);
+	}
 
-  async exists(path: string): Promise<boolean> {
-    const result = await this.runShell(`test -e ${shellQuote(path)}`);
-    return result.exitCode === 0;
-  }
+	async exists(path: string): Promise<boolean> {
+		const result = await this.runShell(`test -e ${shellQuote(path)}`);
+		return result.exitCode === 0;
+	}
 
-  async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
-    const cmd = options?.recursive ? `mkdir -p ${shellQuote(path)}` : `mkdir ${shellQuote(path)}`;
-    const result = await this.runShell(cmd);
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `[flue:modal] mkdir failed for ${path}: ` +
-          (result.stderr || result.stdout || `exit ${result.exitCode}`),
-      );
-    }
-  }
+	async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
+		const cmd = options?.recursive
+			? `mkdir -p ${shellQuote(path)}`
+			: `mkdir ${shellQuote(path)}`;
+		const result = await this.runShell(cmd);
+		if (result.exitCode !== 0) {
+			throw new Error(
+				`[flue:modal] mkdir failed for ${path}: ` +
+					(result.stderr || result.stdout || `exit ${result.exitCode}`),
+			);
+		}
+	}
 
-  async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
-    const flags: string[] = [];
-    if (options?.recursive) flags.push('-r');
-    if (options?.force) flags.push('-f');
-    const flagStr = flags.length > 0 ? ` ${flags.join('')}` : '';
-    const result = await this.runShell(`rm${flagStr} ${shellQuote(path)}`);
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `[flue:modal] rm failed for ${path}: ` +
-          (result.stderr || result.stdout || `exit ${result.exitCode}`),
-      );
-    }
-  }
+	async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+		const flags: string[] = [];
+		if (options?.recursive) flags.push('-r');
+		if (options?.force) flags.push('-f');
+		const flagStr = flags.length > 0 ? ` ${flags.join('')}` : '';
+		const result = await this.runShell(`rm${flagStr} ${shellQuote(path)}`);
+		if (result.exitCode !== 0) {
+			throw new Error(
+				`[flue:modal] rm failed for ${path}: ` +
+					(result.stderr || result.stdout || `exit ${result.exitCode}`),
+			);
+		}
+	}
 
-  async exec(
-    command: string,
-    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    return this.runShell(command, options);
-  }
+	async exec(
+		command: string,
+		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		return this.runShell(command, options);
+	}
 
-  private async runShell(
-    command: string,
-    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    // Modal's exec takes argv (no shell parsing), so wrap in `bash -lc`
-    // so users can pass shell commands the way Flue's other connectors
-    // accept them. `pipe` for stdout/stderr is required to read them
-    // back; the default `ignore` discards output.
-    const proc = await this.sandbox.exec(['bash', '-lc', command], {
-      workdir: options?.cwd,
-      env: options?.env,
-      // Flue passes timeout in seconds; Modal expects milliseconds.
-      timeoutMs: typeof options?.timeout === 'number' ? options.timeout * 1000 : undefined,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
+	private async runShell(
+		command: string,
+		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		// Modal's exec takes argv (no shell parsing), so wrap in `bash -lc`
+		// so users can pass shell commands the way Flue's other connectors
+		// accept them. `pipe` for stdout/stderr is required to read them
+		// back; the default `ignore` discards output.
+		const proc = await this.sandbox.exec(['bash', '-lc', command], {
+			workdir: options?.cwd,
+			env: options?.env,
+			// Flue passes timeout in seconds; Modal expects milliseconds.
+			timeoutMs: typeof options?.timeout === 'number' ? options.timeout * 1000 : undefined,
+			stdout: 'pipe',
+			stderr: 'pipe',
+		});
 
-    // Read both streams concurrently while the process runs, then wait
-    // for the exit code. Reading first and then waiting will deadlock
-    // on processes that fill their stderr buffer.
-    const [stdout, stderr, exitCode] = await Promise.all([
-      proc.stdout.readText(),
-      proc.stderr.readText(),
-      proc.wait(),
-    ]);
-    return { stdout, stderr, exitCode };
-  }
+		// Read both streams concurrently while the process runs, then wait
+		// for the exit code. Reading first and then waiting will deadlock
+		// on processes that fill their stderr buffer.
+		const [stdout, stderr, exitCode] = await Promise.all([
+			proc.stdout.readText(),
+			proc.stderr.readText(),
+			proc.wait(),
+		]);
+		return { stdout, stderr, exitCode };
+	}
 }
 
 /**
@@ -238,15 +246,15 @@ class ModalSandboxApi implements SandboxApi {
  * for agent use.
  */
 export function modal(sandbox: ModalSandbox, options?: ModalConnectorOptions): SandboxFactory {
-  return {
-    async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
-      const sandboxCwd = cwd ?? options?.cwd ?? '/';
-      const api = new ModalSandboxApi(sandbox);
-      return createSandboxSessionEnv(api, sandboxCwd);
-    },
-  };
+	return {
+		async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
+			const sandboxCwd = cwd ?? options?.cwd ?? '/';
+			const api = new ModalSandboxApi(sandbox);
+			return createSandboxSessionEnv(api, sandboxCwd);
+		},
+	};
 }
-````
+```
 
 ## Required dependencies
 
@@ -302,7 +310,7 @@ import { modal } from '../connectors/modal'; // adjust path to match the user's 
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
-export async function run({ init }: FlueContext) {
+export async function run ({ init }: FlueContext) {
   // ModalClient reads MODAL_TOKEN_ID / MODAL_TOKEN_SECRET (or ~/.modal.toml)
   // automatically.
   const client = new ModalClient();

@@ -1,0 +1,10 @@
+**/.astro/
+**/.flue-vite/
+**/.wrangler/
+**/dist/
+**/node_modules/
+**/.turbo/
+**/.cache/
+packages/cli/bin/_connectors.generated.ts
+connectors/sandbox*.md
+plans/

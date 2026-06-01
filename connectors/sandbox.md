@@ -1,5 +1,8 @@
 ---
-{ 'category': 'sandbox', 'root': true }
+{
+  "category": "sandbox",
+  "root": true
+}
 ---
 
 # Generic Sandbox Connector

@@ -9,17 +9,6 @@ const MAX_GREP_LINE_LENGTH = 500;
 const MAX_GLOB_RESULTS = 1000;
 const BASE64_READ_LINE_LENGTH = 76;
 
-/** Names reserved by the framework's default tool set. */
-export const BUILTIN_TOOL_NAMES = new Set([
-	'read',
-	'write',
-	'edit',
-	'bash',
-	'grep',
-	'glob',
-	'task',
-]);
-
 export interface TaskToolParams {
 	prompt: string;
 	description?: string;

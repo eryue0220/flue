@@ -1,5 +1,8 @@
 ---
-{ 'category': 'sandbox', 'website': 'https://islo.dev' }
+{
+  "category": "sandbox",
+  "website": "https://islo.dev"
+}
 ---
 
 # Add a Flue Connector: islo
@@ -41,7 +44,7 @@ Create any missing parent directories.
 Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxApi` contract, and the shell quoting in particular is load-bearing.
 
-````ts
+```ts
 /**
  * islo connector for Flue. Adapts a named islo sandbox to Flue's SandboxApi
  * by shelling out to the islo CLI. The user owns the sandbox lifecycle.
@@ -62,10 +65,10 @@ import { createSandboxSessionEnv } from '@flue/runtime';
 import type { SandboxApi, SandboxFactory, SessionEnv, FileStat } from '@flue/runtime';
 
 export interface IsloConnectorOptions {
-  /** Default cwd inside the sandbox. Defaults to `/workspace`. */
-  cwd?: string;
-  /** Path to the islo binary. Defaults to `"islo"` (resolved via PATH). */
-  cliPath?: string;
+	/** Default cwd inside the sandbox. Defaults to `/workspace`. */
+	cwd?: string;
+	/** Path to the islo binary. Defaults to `"islo"` (resolved via PATH). */
+	cliPath?: string;
 }
 
 const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
@@ -82,116 +85,117 @@ const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
  * (single-quote-safe alphabet) because the CLI decodes stdout as UTF-8.
  */
 class IsloSandboxApi implements SandboxApi {
-  constructor(
-    private name: string,
-    private cliPath: string,
-  ) {}
+	constructor(
+		private name: string,
+		private cliPath: string,
+	) {}
 
-  async exec(
-    command: string,
-    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    const cd = options?.cwd ? `cd ${q(options.cwd)} && ` : '';
-    const envPrefix = options?.env
-      ? Object.entries(options.env)
-          .map(([k, v]) => `${k}=${q(v)}`)
-          .join(' ') + ' '
-      : '';
-    // Enforce timeout via GNU coreutils `timeout(1)` inside the sandbox.
-    // islo's API has a `timeout_secs` field but it's currently advisory
-    // only ("Optional client-side timeout hint. Currently accepted for
-    // API compatibility." — islo API docs), so we have to enforce it
-    // remotely. Assumes the sandbox image ships GNU coreutils, which is
-    // true for the default islo runner and almost every standard Linux
-    // image. On exceedance, `timeout` exits 124, which propagates through
-    // the CLI as our exit code.
-    const tmo = typeof options?.timeout === 'number' ? `timeout ${options.timeout} ` : '';
-    const remote = `${tmo}${envPrefix}bash -lc ${q(cd + command)}`;
+	async exec(
+		command: string,
+		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		const cd = options?.cwd ? `cd ${q(options.cwd)} && ` : '';
+		const envPrefix = options?.env
+			? Object.entries(options.env)
+					.map(([k, v]) => `${k}=${q(v)}`)
+					.join(' ') + ' '
+			: '';
+		// Enforce timeout via GNU coreutils `timeout(1)` inside the sandbox.
+		// islo's API has a `timeout_secs` field but it's currently advisory
+		// only ("Optional client-side timeout hint. Currently accepted for
+		// API compatibility." — islo API docs), so we have to enforce it
+		// remotely. Assumes the sandbox image ships GNU coreutils, which is
+		// true for the default islo runner and almost every standard Linux
+		// image. On exceedance, `timeout` exits 124, which propagates through
+		// the CLI as our exit code.
+		const tmo =
+			typeof options?.timeout === 'number' ? `timeout ${options.timeout} ` : '';
+		const remote = `${tmo}${envPrefix}bash -lc ${q(cd + command)}`;
 
-    const args = ['--output', 'json', 'use', this.name, '--', 'bash', '-lc', remote];
-    return new Promise((resolve, reject) => {
-      const child = spawn(this.cliPath, args, {
-        env: process.env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      const out: Buffer[] = [];
-      const err: Buffer[] = [];
-      child.stdout.on('data', (c) => out.push(c));
-      child.stderr.on('data', (c) => err.push(c));
-      child.on('error', (e) =>
-        reject(
-          new Error(
-            `[flue:islo] failed to spawn '${this.cliPath}': ${e.message}. ` +
-              `Install the islo CLI: https://docs.islo.dev/getting-started/installation`,
-          ),
-        ),
-      );
-      child.on('close', (code) => {
-        resolve({
-          stdout: Buffer.concat(out).toString('utf-8'),
-          stderr: Buffer.concat(err)
-            .toString('utf-8')
-            .replace(/\n*Exit code: \d+\n?$/, ''),
-          exitCode: code ?? 0,
-        });
-      });
-    });
-  }
+		const args = ['--output', 'json', 'use', this.name, '--', 'bash', '-lc', remote];
+		return new Promise((resolve, reject) => {
+			const child = spawn(this.cliPath, args, {
+				env: process.env,
+				stdio: ['ignore', 'pipe', 'pipe'],
+			});
+			const out: Buffer[] = [];
+			const err: Buffer[] = [];
+			child.stdout.on('data', (c) => out.push(c));
+			child.stderr.on('data', (c) => err.push(c));
+			child.on('error', (e) =>
+				reject(
+					new Error(
+						`[flue:islo] failed to spawn '${this.cliPath}': ${e.message}. ` +
+							`Install the islo CLI: https://docs.islo.dev/getting-started/installation`,
+					),
+				),
+			);
+			child.on('close', (code) => {
+				resolve({
+					stdout: Buffer.concat(out).toString('utf-8'),
+					stderr: Buffer.concat(err)
+						.toString('utf-8')
+						.replace(/\n*Exit code: \d+\n?$/, ''),
+					exitCode: code ?? 0,
+				});
+			});
+		});
+	}
 
-  async readFile(path: string): Promise<string> {
-    const r = await this.exec(`cat -- ${q(path)}`);
-    if (r.exitCode !== 0) throw new Error(`[flue:islo] readFile ${path}: ${r.stderr}`);
-    return r.stdout;
-  }
+	async readFile(path: string): Promise<string> {
+		const r = await this.exec(`cat -- ${q(path)}`);
+		if (r.exitCode !== 0) throw new Error(`[flue:islo] readFile ${path}: ${r.stderr}`);
+		return r.stdout;
+	}
 
-  async readFileBuffer(path: string): Promise<Uint8Array> {
-    const r = await this.exec(`base64 < ${q(path)}`);
-    if (r.exitCode !== 0) throw new Error(`[flue:islo] readFile ${path}: ${r.stderr}`);
-    return Uint8Array.from(Buffer.from(r.stdout.replace(/\s+/g, ''), 'base64'));
-  }
+	async readFileBuffer(path: string): Promise<Uint8Array> {
+		const r = await this.exec(`base64 < ${q(path)}`);
+		if (r.exitCode !== 0) throw new Error(`[flue:islo] readFile ${path}: ${r.stderr}`);
+		return Uint8Array.from(Buffer.from(r.stdout.replace(/\s+/g, ''), 'base64'));
+	}
 
-  async writeFile(path: string, content: string | Uint8Array): Promise<void> {
-    const buf = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
-    const b64 = buf.toString('base64'); // single-quote-safe alphabet
-    const r = await this.exec(
-      `mkdir -p "$(dirname ${q(path)})" && printf %s '${b64}' | base64 -d > ${q(path)}`,
-    );
-    if (r.exitCode !== 0) throw new Error(`[flue:islo] writeFile ${path}: ${r.stderr}`);
-  }
+	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+		const buf = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
+		const b64 = buf.toString('base64'); // single-quote-safe alphabet
+		const r = await this.exec(
+			`mkdir -p "$(dirname ${q(path)})" && printf %s '${b64}' | base64 -d > ${q(path)}`,
+		);
+		if (r.exitCode !== 0) throw new Error(`[flue:islo] writeFile ${path}: ${r.stderr}`);
+	}
 
-  async stat(path: string): Promise<FileStat> {
-    const r = await this.exec(`stat -c '%F|%s|%Y' ${q(path)}`);
-    if (r.exitCode !== 0) throw new Error(`[flue:islo] stat ${path}: ${r.stderr}`);
-    const [type = '', size = '0', mtime = '0'] = r.stdout.trim().split('|');
-    return {
-      isFile: type.startsWith('regular'),
-      isDirectory: type === 'directory',
-      isSymbolicLink: type === 'symbolic link',
-      size: Number.parseInt(size, 10) || 0,
-      mtime: new Date((Number.parseInt(mtime, 10) || 0) * 1000),
-    };
-  }
+	async stat(path: string): Promise<FileStat> {
+		const r = await this.exec(`stat -c '%F|%s|%Y' ${q(path)}`);
+		if (r.exitCode !== 0) throw new Error(`[flue:islo] stat ${path}: ${r.stderr}`);
+		const [type = '', size = '0', mtime = '0'] = r.stdout.trim().split('|');
+		return {
+			isFile: type.startsWith('regular'),
+			isDirectory: type === 'directory',
+			isSymbolicLink: type === 'symbolic link',
+			size: Number.parseInt(size, 10) || 0,
+			mtime: new Date((Number.parseInt(mtime, 10) || 0) * 1000),
+		};
+	}
 
-  async readdir(path: string): Promise<string[]> {
-    const r = await this.exec(`ls -A1 ${q(path)}`);
-    if (r.exitCode !== 0) throw new Error(`[flue:islo] readdir ${path}: ${r.stderr}`);
-    return r.stdout.split('\n').filter(Boolean);
-  }
+	async readdir(path: string): Promise<string[]> {
+		const r = await this.exec(`ls -A1 ${q(path)}`);
+		if (r.exitCode !== 0) throw new Error(`[flue:islo] readdir ${path}: ${r.stderr}`);
+		return r.stdout.split('\n').filter(Boolean);
+	}
 
-  async exists(path: string): Promise<boolean> {
-    return (await this.exec(`test -e ${q(path)}`)).exitCode === 0;
-  }
+	async exists(path: string): Promise<boolean> {
+		return (await this.exec(`test -e ${q(path)}`)).exitCode === 0;
+	}
 
-  async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
-    const r = await this.exec(`mkdir ${options?.recursive ? '-p ' : ''}${q(path)}`);
-    if (r.exitCode !== 0) throw new Error(`[flue:islo] mkdir ${path}: ${r.stderr}`);
-  }
+	async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
+		const r = await this.exec(`mkdir ${options?.recursive ? '-p ' : ''}${q(path)}`);
+		if (r.exitCode !== 0) throw new Error(`[flue:islo] mkdir ${path}: ${r.stderr}`);
+	}
 
-  async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
-    const flags = `${options?.recursive ? 'r' : ''}${options?.force ? 'f' : ''}`;
-    const r = await this.exec(`rm ${flags ? `-${flags} ` : ''}${q(path)}`);
-    if (r.exitCode !== 0) throw new Error(`[flue:islo] rm ${path}: ${r.stderr}`);
-  }
+	async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+		const flags = `${options?.recursive ? 'r' : ''}${options?.force ? 'f' : ''}`;
+		const r = await this.exec(`rm ${flags ? `-${flags} ` : ''}${q(path)}`);
+		if (r.exitCode !== 0) throw new Error(`[flue:islo] rm ${path}: ${r.stderr}`);
+	}
 }
 
 /**
@@ -200,16 +204,16 @@ class IsloSandboxApi implements SandboxApi {
  * delete); this factory just adapts it.
  */
 export function islo(name: string, options?: IsloConnectorOptions): SandboxFactory {
-  const cliPath = options?.cliPath ?? 'islo';
-  return {
-    async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
-      const sandboxCwd = cwd ?? options?.cwd ?? '/workspace';
-      const api = new IsloSandboxApi(name, cliPath);
-      return createSandboxSessionEnv(api, sandboxCwd);
-    },
-  };
+	const cliPath = options?.cliPath ?? 'islo';
+	return {
+		async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
+			const sandboxCwd = cwd ?? options?.cwd ?? '/workspace';
+			const api = new IsloSandboxApi(name, cliPath);
+			return createSandboxSessionEnv(api, sandboxCwd);
+		},
+	};
 }
-````
+```
 
 ## Required dependencies
 
@@ -271,7 +275,7 @@ import { islo } from '../connectors/islo'; // adjust path to match the user's la
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
-export async function run({ init }: FlueContext) {
+export async function run ({ init }: FlueContext) {
   const agent = createAgent(() => ({
     sandbox: islo('my-sandbox'),
     model: 'anthropic/claude-sonnet-4-6',

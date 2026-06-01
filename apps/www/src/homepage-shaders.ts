@@ -8,7 +8,7 @@ import {
 	getShaderColorFromString,
 	type DitheringShape,
 	type DitheringType,
-} from "@paper-design/shaders";
+} from '@paper-design/shaders';
 
 type DitheringConfig = {
 	colorBack: string;
@@ -33,8 +33,8 @@ type PerformanceNavigator = Navigator & {
 };
 
 export function setupHomepageShaders() {
-	const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-	const smallViewport = window.matchMedia("(max-width: 767px)");
+	const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+	const smallViewport = window.matchMedia('(max-width: 767px)');
 	const performanceNavigator = navigator as PerformanceNavigator;
 	const constrainedDevice =
 		(performanceNavigator.hardwareConcurrency > 0 &&
@@ -71,13 +71,13 @@ export function setupHomepageShaders() {
 				pixelBudget(),
 			);
 		} catch {
-			element.querySelector("canvas")?.remove();
+			element.querySelector('canvas')?.remove();
 			return undefined;
 		}
 	};
 
 	const ambientStates = new Map<HTMLElement, AmbientState>();
-	document.querySelectorAll<HTMLElement>("[data-ambient-shader]").forEach((element) => {
+	document.querySelectorAll<HTMLElement>('[data-ambient-shader]').forEach((element) => {
 		ambientStates.set(element, {
 			config: {
 				colorBack: element.dataset.colorBack!,
@@ -121,7 +121,7 @@ export function setupHomepageShaders() {
 				}
 			});
 		},
-		{ rootMargin: "480px 0px" },
+		{ rootMargin: '480px 0px' },
 	);
 	const motionObserver = new IntersectionObserver((entries) => {
 		entries.forEach((entry) => {
@@ -137,16 +137,16 @@ export function setupHomepageShaders() {
 	});
 
 	const updateMode = () => ambientStates.forEach((state) => updateState(state));
-	reducedMotion.addEventListener("change", updateMode);
-	smallViewport.addEventListener("change", updateMode);
+	reducedMotion.addEventListener('change', updateMode);
+	smallViewport.addEventListener('change', updateMode);
 
 	window.addEventListener(
-		"pagehide",
+		'pagehide',
 		() => {
 			mountObserver.disconnect();
 			motionObserver.disconnect();
-			reducedMotion.removeEventListener("change", updateMode);
-			smallViewport.removeEventListener("change", updateMode);
+			reducedMotion.removeEventListener('change', updateMode);
+			smallViewport.removeEventListener('change', updateMode);
 			ambientStates.forEach((state) => disposeState(state));
 		},
 		{ once: true },

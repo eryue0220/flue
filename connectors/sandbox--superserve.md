@@ -1,5 +1,8 @@
 ---
-{ 'category': 'sandbox', 'website': 'https://superserve.ai' }
+{
+  "category": "sandbox",
+  "website": "https://superserve.ai"
+}
 ---
 
 # Add a Flue Connector: Superserve
@@ -35,7 +38,7 @@ Create any missing parent directories.
 Write this file verbatim. Do not "improve" it — it conforms to the published
 `SandboxApi` contract.
 
-````ts
+```ts
 /**
  * Superserve connector for Flue.
  *
@@ -60,21 +63,21 @@ import type { SandboxApi, SandboxFactory, SessionEnv, FileStat } from '@flue/sdk
 import type { Sandbox as SuperserveSandbox } from '@superserve/sdk';
 
 export interface SuperserveConnectorOptions {
-  /**
-   * Cleanup behavior when the session is destroyed.
-   *
-   * - `false` (default): No cleanup — user manages the sandbox lifecycle.
-   * - `true`: Calls `sandbox.kill()` on session destroy.
-   * - Function: Calls the provided function on session destroy.
-   */
-  cleanup?: boolean | (() => Promise<void>);
+	/**
+	 * Cleanup behavior when the session is destroyed.
+	 *
+	 * - `false` (default): No cleanup — user manages the sandbox lifecycle.
+	 * - `true`: Calls `sandbox.kill()` on session destroy.
+	 * - Function: Calls the provided function on session destroy.
+	 */
+	cleanup?: boolean | (() => Promise<void>);
 }
 
 /**
  * Quote a string for safe inclusion in a shell command.
  */
 function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 /**
@@ -101,119 +104,125 @@ function shellQuote(value: string): string {
  * (per the connector spec) so we multiply.
  */
 class SuperserveSandboxApi implements SandboxApi {
-  constructor(private sandbox: SuperserveSandbox) {}
+	constructor(private sandbox: SuperserveSandbox) {}
 
-  async readFile(path: string): Promise<string> {
-    return this.sandbox.files.readText(path);
-  }
+	async readFile(path: string): Promise<string> {
+		return this.sandbox.files.readText(path);
+	}
 
-  async readFileBuffer(path: string): Promise<Uint8Array> {
-    return this.sandbox.files.read(path);
-  }
+	async readFileBuffer(path: string): Promise<Uint8Array> {
+		return this.sandbox.files.read(path);
+	}
 
-  async writeFile(path: string, content: string | Uint8Array): Promise<void> {
-    // `sandbox.files.write` accepts `string | Uint8Array | ArrayBuffer | Blob`
-    // and copies Uint8Array into a plain ArrayBuffer internally, so we can
-    // pass content straight through.
-    await this.sandbox.files.write(path, content);
-  }
+	async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+		// `sandbox.files.write` accepts `string | Uint8Array | ArrayBuffer | Blob`
+		// and copies Uint8Array into a plain ArrayBuffer internally, so we can
+		// pass content straight through.
+		await this.sandbox.files.write(path, content);
+	}
 
-  async stat(path: string): Promise<FileStat> {
-    // `stat -c '%F|%s|%Y'` is GNU stat (default on the Superserve base
-    // image, Ubuntu 24.04). Format: <type>|<size>|<mtime-epoch>.
-    const result = await this.runShell(`stat -c '%F|%s|%Y' ${shellQuote(path)}`);
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `[flue:superserve] stat failed for ${path}: ${result.stderr || result.stdout}`,
-      );
-    }
-    const [type = '', sizeStr = '0', mtimeStr = '0'] = result.stdout.trim().split('|');
-    const size = Number.parseInt(sizeStr, 10);
-    const mtimeSecs = Number.parseInt(mtimeStr, 10);
-    return {
-      isFile: type === 'regular file' || type === 'regular empty file',
-      isDirectory: type === 'directory',
-      isSymbolicLink: type === 'symbolic link',
-      size: Number.isFinite(size) ? size : 0,
-      mtime: new Date((Number.isFinite(mtimeSecs) ? mtimeSecs : 0) * 1000),
-    };
-  }
+	async stat(path: string): Promise<FileStat> {
+		// `stat -c '%F|%s|%Y'` is GNU stat (default on the Superserve base
+		// image, Ubuntu 24.04). Format: <type>|<size>|<mtime-epoch>.
+		const result = await this.runShell(
+			`stat -c '%F|%s|%Y' ${shellQuote(path)}`,
+		);
+		if (result.exitCode !== 0) {
+			throw new Error(
+				`[flue:superserve] stat failed for ${path}: ${result.stderr || result.stdout}`,
+			);
+		}
+		const [type = '', sizeStr = '0', mtimeStr = '0'] = result.stdout.trim().split('|');
+		const size = Number.parseInt(sizeStr, 10);
+		const mtimeSecs = Number.parseInt(mtimeStr, 10);
+		return {
+			isFile: type === 'regular file' || type === 'regular empty file',
+			isDirectory: type === 'directory',
+			isSymbolicLink: type === 'symbolic link',
+			size: Number.isFinite(size) ? size : 0,
+			mtime: new Date((Number.isFinite(mtimeSecs) ? mtimeSecs : 0) * 1000),
+		};
+	}
 
-  async readdir(path: string): Promise<string[]> {
-    // `ls -A1` excludes . and .. but lists dotfiles, one per line.
-    const result = await this.runShell(`ls -A1 ${shellQuote(path)}`);
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `[flue:superserve] readdir failed for ${path}: ${result.stderr || result.stdout}`,
-      );
-    }
-    return result.stdout.split('\n').filter((line) => line.length > 0);
-  }
+	async readdir(path: string): Promise<string[]> {
+		// `ls -A1` excludes . and .. but lists dotfiles, one per line.
+		const result = await this.runShell(`ls -A1 ${shellQuote(path)}`);
+		if (result.exitCode !== 0) {
+			throw new Error(
+				`[flue:superserve] readdir failed for ${path}: ${result.stderr || result.stdout}`,
+			);
+		}
+		return result.stdout.split('\n').filter((line) => line.length > 0);
+	}
 
-  async exists(path: string): Promise<boolean> {
-    const result = await this.runShell(`test -e ${shellQuote(path)}`);
-    return result.exitCode === 0;
-  }
+	async exists(path: string): Promise<boolean> {
+		const result = await this.runShell(`test -e ${shellQuote(path)}`);
+		return result.exitCode === 0;
+	}
 
-  async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
-    const cmd = options?.recursive ? `mkdir -p ${shellQuote(path)}` : `mkdir ${shellQuote(path)}`;
-    const result = await this.runShell(cmd);
-    if (result.exitCode !== 0) {
-      throw new Error(
-        `[flue:superserve] mkdir failed for ${path}: ${result.stderr || result.stdout}`,
-      );
-    }
-  }
+	async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
+		const cmd = options?.recursive
+			? `mkdir -p ${shellQuote(path)}`
+			: `mkdir ${shellQuote(path)}`;
+		const result = await this.runShell(cmd);
+		if (result.exitCode !== 0) {
+			throw new Error(
+				`[flue:superserve] mkdir failed for ${path}: ${result.stderr || result.stdout}`,
+			);
+		}
+	}
 
-  async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
-    let flags = '';
-    if (options?.recursive) flags += 'r';
-    if (options?.force) flags += 'f';
-    const flagPart = flags.length > 0 ? `-${flags} ` : '';
-    const result = await this.runShell(`rm ${flagPart}${shellQuote(path)}`);
-    if (result.exitCode !== 0) {
-      throw new Error(`[flue:superserve] rm failed for ${path}: ${result.stderr || result.stdout}`);
-    }
-  }
+	async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+		let flags = '';
+		if (options?.recursive) flags += 'r';
+		if (options?.force) flags += 'f';
+		const flagPart = flags.length > 0 ? `-${flags} ` : '';
+		const result = await this.runShell(`rm ${flagPart}${shellQuote(path)}`);
+		if (result.exitCode !== 0) {
+			throw new Error(
+				`[flue:superserve] rm failed for ${path}: ${result.stderr || result.stdout}`,
+			);
+		}
+	}
 
-  async exec(
-    command: string,
-    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    return this.runShell(command, options);
-  }
+	async exec(
+		command: string,
+		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		return this.runShell(command, options);
+	}
 
-  private async runShell(
-    command: string,
-    options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
-  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    try {
-      const result = await this.sandbox.commands.run(command, {
-        cwd: options?.cwd,
-        env: options?.env,
-        // Flue passes timeout in seconds; Superserve expects milliseconds.
-        timeoutMs: typeof options?.timeout === 'number' ? options.timeout * 1000 : undefined,
-      });
-      return {
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-      };
-    } catch (err) {
-      const isTimeout =
-        err !== null &&
-        typeof err === 'object' &&
-        (err as { name?: string }).name === 'TimeoutError';
-      if (isTimeout) {
-        return {
-          stdout: '',
-          stderr: `[flue:superserve] command timed out after ${options?.timeout}s`,
-          exitCode: 124,
-        };
-      }
-      throw err;
-    }
-  }
+	private async runShell(
+		command: string,
+		options?: { cwd?: string; env?: Record<string, string>; timeout?: number },
+	): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+		try {
+			const result = await this.sandbox.commands.run(command, {
+				cwd: options?.cwd,
+				env: options?.env,
+				// Flue passes timeout in seconds; Superserve expects milliseconds.
+				timeoutMs: typeof options?.timeout === 'number' ? options.timeout * 1000 : undefined,
+			});
+			return {
+				stdout: result.stdout,
+				stderr: result.stderr,
+				exitCode: result.exitCode,
+			};
+		} catch (err) {
+			const isTimeout =
+				err !== null &&
+				typeof err === 'object' &&
+				(err as { name?: string }).name === 'TimeoutError';
+			if (isTimeout) {
+				return {
+					stdout: '',
+					stderr: `[flue:superserve] command timed out after ${options?.timeout}s`,
+					exitCode: 124,
+				};
+			}
+			throw err;
+		}
+	}
 }
 
 /**
@@ -222,32 +231,32 @@ class SuperserveSandboxApi implements SandboxApi {
  * for agent use.
  */
 export function superserve(
-  sandbox: SuperserveSandbox,
-  options?: SuperserveConnectorOptions,
+	sandbox: SuperserveSandbox,
+	options?: SuperserveConnectorOptions,
 ): SandboxFactory {
-  return {
-    async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
-      const sandboxCwd = cwd ?? '/home/user';
-      const api = new SuperserveSandboxApi(sandbox);
+	return {
+		async createSessionEnv({ cwd }: { id: string; cwd?: string }): Promise<SessionEnv> {
+			const sandboxCwd = cwd ?? '/home/user';
+			const api = new SuperserveSandboxApi(sandbox);
 
-      let cleanupFn: (() => Promise<void>) | undefined;
-      if (options?.cleanup === true) {
-        cleanupFn = async () => {
-          try {
-            await sandbox.kill();
-          } catch (err) {
-            console.error('[flue:superserve] Failed to kill sandbox:', err);
-          }
-        };
-      } else if (typeof options?.cleanup === 'function') {
-        cleanupFn = options.cleanup;
-      }
+			let cleanupFn: (() => Promise<void>) | undefined;
+			if (options?.cleanup === true) {
+				cleanupFn = async () => {
+					try {
+						await sandbox.kill();
+					} catch (err) {
+						console.error('[flue:superserve] Failed to kill sandbox:', err);
+					}
+				};
+			} else if (typeof options?.cleanup === 'function') {
+				cleanupFn = options.cleanup;
+			}
 
-      return createSandboxSessionEnv(api, sandboxCwd, cleanupFn);
-    },
-  };
+			return createSandboxSessionEnv(api, sandboxCwd, cleanupFn);
+		},
+	};
 }
-````
+```
 
 ## Required dependencies
 
@@ -294,7 +303,7 @@ import { superserve } from '../connectors/superserve'; // adjust path to match t
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
-export async function run({ init }: FlueContext) {
+export async function run ({ init }: FlueContext) {
   // The Superserve SDK reads SUPERSERVE_API_KEY from the environment
   // automatically; pass `apiKey` explicitly only if you keep it elsewhere.
   const sandbox = await Sandbox.create({ name: `agent-${Date.now()}` });
