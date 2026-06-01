@@ -275,6 +275,9 @@ export class SessionHistory {
 
 	static fromData(data: SessionData | null): SessionHistory {
 		if (!data) return SessionHistory.empty();
+		if (data.version !== 4) {
+			throw new Error(`[flue] Session data version ${String(data.version)} is unsupported. Clear persisted session state created by an earlier Flue beta.`);
+		}
 		return new SessionHistory(data.entries, data.leafId);
 	}
 
@@ -424,7 +427,7 @@ export class SessionHistory {
 
 	toData(metadata: Record<string, any>, createdAt: string, updatedAt: string): SessionData {
 		return {
-			version: 3,
+			version: 4,
 			entries: [...this.entries],
 			leafId: this.leafId,
 			metadata,
@@ -478,7 +481,6 @@ function renderDispatchInput(input: DispatchInput): string {
 		`agent: ${input.agent}`,
 		`id: ${input.id}`,
 		`session: ${input.session}`,
-		`targetAgent: ${input.targetAgent}`,
 		`dispatchId: ${input.dispatchId}`,
 		`acceptedAt: ${input.acceptedAt}`,
 		'',
@@ -491,7 +493,6 @@ function renderDispatchInput(input: DispatchInput): string {
 function dispatchMetadata(input: DispatchInput): DispatchMessageMetadata {
 	const metadata: DispatchMessageMetadata = {
 		dispatchId: input.dispatchId,
-		targetAgent: input.targetAgent,
 		agent: input.agent,
 		id: input.id,
 		session: input.session,

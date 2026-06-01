@@ -57,7 +57,7 @@ export default createAgent(() => ({
 
 ```ts
 interface SessionData {
-  version: 3;
+  version: 4;
   entries: SessionEntry[];
   leafId: string | null;
   metadata: Record<string, any>;
@@ -65,6 +65,10 @@ interface SessionData {
   updatedAt: string;
 }
 ```
+
+Flue rejects records written with an unsupported `version`. During the beta,
+clear older persisted session state when upgrading across a storage-version
+change.
 
 `entries` contains the stored session history tree:
 

@@ -353,7 +353,6 @@ describe('observe model-turn telemetry', () => {
 			const dispatchSession = await (await dispatchCtx.init(agent)).session() as FlueSession & { processDispatchInput(input: DispatchInput): PromiseLike<unknown> };
 			await dispatchSession.processDispatchInput({
 				dispatchId: 'dispatch-1',
-				targetAgent: 'assistant',
 				agent: 'assistant',
 				id: 'persistent-instance',
 				session: 'default',

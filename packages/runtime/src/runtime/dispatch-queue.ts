@@ -2,7 +2,6 @@ import type { DispatchReceipt } from '../types.ts';
 
 export interface DispatchInput {
 	dispatchId: string;
-	targetAgent: string;
 	agent: string;
 	id: string;
 	session: string;
@@ -11,6 +10,12 @@ export interface DispatchInput {
 }
 
 export type { DispatchReceipt } from '../types.ts';
+
+export function assertCurrentDispatchInput(value: unknown): asserts value is DispatchInput {
+	if (value && typeof value === 'object' && 'targetAgent' in value) {
+		throw new Error('[flue] Legacy dispatch metadata is unsupported. Clear persisted dispatch state created by an earlier Flue beta.');
+	}
+}
 
 export interface DispatchProcessor {
 	process(input: DispatchInput): Promise<void> | void;

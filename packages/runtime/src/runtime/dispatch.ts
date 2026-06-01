@@ -14,13 +14,12 @@ export async function enqueueDispatch(options: {
 	dispatchQueue: DispatchQueue;
 	rt: DispatchRuntime;
 }): Promise<DispatchReceipt> {
-	const targetAgent = options.request.agent;
-	const input = validateAndCloneDispatchRequest(options.request, targetAgent, options.rt);
+	const agent = options.request.agent;
+	const input = validateAndCloneDispatchRequest(options.request, agent, options.rt);
 	const session = options.request.session ?? 'default';
 	return options.dispatchQueue.enqueue({
 		dispatchId: crypto.randomUUID(),
-		targetAgent,
-		agent: targetAgent,
+		agent,
 		id: options.request.id,
 		session,
 		input,
@@ -30,10 +29,10 @@ export async function enqueueDispatch(options: {
 
 function validateAndCloneDispatchRequest(
 	request: NamedAgentDispatchRequest,
-	targetAgent: string,
+	agent: string,
 	rt: DispatchRuntime,
 ): unknown {
-	if (typeof targetAgent !== 'string' || targetAgent.trim() === '') {
+	if (typeof agent !== 'string' || agent.trim() === '') {
 		throw new Error('[flue] dispatch() requires a non-empty target agent.');
 	}
 	if (typeof request.id !== 'string' || request.id.trim() === '') {
@@ -45,8 +44,8 @@ function validateAndCloneDispatchRequest(
 	if (request.input === undefined) {
 		throw new Error('[flue] dispatch() requires an "input" payload. Use null for an intentional empty payload.');
 	}
-	if (!agentExists(rt, targetAgent)) {
-		throw new Error(`[flue] dispatch() target agent "${targetAgent}" is not registered.`);
+	if (!agentExists(rt, agent)) {
+		throw new Error(`[flue] dispatch() target agent "${agent}" is not registered.`);
 	}
 	return cloneJsonSerializable(request.input, 'dispatch().input');
 }

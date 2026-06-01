@@ -36,7 +36,7 @@ export {
 	registeredWorkflowsForTransport,
 } from './runtime/flue-app.ts';
 export type { DispatchInput, DispatchProcessor, DispatchQueue } from './runtime/dispatch-queue.ts';
-export { InMemoryDispatchQueue } from './runtime/dispatch-queue.ts';
+export { assertCurrentDispatchInput, InMemoryDispatchQueue } from './runtime/dispatch-queue.ts';
 export type {
 	AgentHandler,
 	AgentSessionTarget,

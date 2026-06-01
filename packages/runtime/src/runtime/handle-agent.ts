@@ -3,7 +3,7 @@
 import type { FlueContextInternal } from '../client.ts';
 import { InvalidRequestError, parseJsonBody, RunEventTooLargeError, RunStoreUnavailableError, toHttpResponse, toPublicError } from '../errors.ts';
 import type { AttachedAgentEvent, AttachedAgentEventCallback, CreatedAgent, DirectAgentPayload, DispatchReceipt, FlueEvent, FlueEventCallback } from '../types.ts';
-import type { DispatchInput, DispatchProcessor } from './dispatch-queue.ts';
+import { assertCurrentDispatchInput, type DispatchInput, type DispatchProcessor } from './dispatch-queue.ts';
 import { streamActiveRunEvents } from './handle-run-routes.ts';
 import { generateWorkflowRunId } from './ids.ts';
 import type { RunOwner, RunRegistry } from './run-registry.ts';
@@ -34,9 +34,10 @@ export function createAgentDispatchProcessor(options: {
 }): DispatchProcessor {
 	return {
 		async process(input) {
-			const agent = options.agents[input.targetAgent];
-			if (!agent) throw new Error(`[flue] dispatch target agent "${input.targetAgent}" has no created agent.`);
-			const releaseSessionLock = await reserveDispatchAgentSession({ agentName: input.targetAgent, instanceId: input.id }, input);
+			assertCurrentDispatchInput(input);
+			const agent = options.agents[input.agent];
+			if (!agent) throw new Error(`[flue] dispatch target agent "${input.agent}" has no created agent.`);
+			const releaseSessionLock = await reserveDispatchAgentSession({ agentName: input.agent, instanceId: input.id }, input);
 			try {
 				const ctx = options.createContext(input.id, undefined, input, dispatchRequest(), undefined, input.dispatchId);
 				await createDispatchAgentHandler(agent, input)(ctx);
@@ -53,6 +54,7 @@ export interface ValidateAgentDispatchAdmissionOptions {
 
 export async function validateAgentDispatchAdmission(options: ValidateAgentDispatchAdmissionOptions): Promise<DispatchReceipt> {
 	const { input } = options;
+	assertCurrentDispatchInput(input);
 	if (!isDispatchInput(input)) throw new Error('[flue] Internal dispatch admission received an invalid payload.');
 	return { dispatchId: input.dispatchId, acceptedAt: input.acceptedAt };
 }
@@ -81,8 +83,7 @@ function isDispatchInput(value: unknown): value is DispatchInput {
 	if (!value || typeof value !== 'object') return false;
 	const input = value as Partial<DispatchInput>;
 	return typeof input.dispatchId === 'string' && input.dispatchId.trim() !== ''
-		&& typeof input.targetAgent === 'string' && input.targetAgent.trim() !== ''
-		&& input.agent === input.targetAgent
+		&& typeof input.agent === 'string' && input.agent.trim() !== ''
 		&& typeof input.id === 'string' && input.id.trim() !== ''
 		&& typeof input.session === 'string' && input.session.trim() !== ''
 		&& input.input !== undefined

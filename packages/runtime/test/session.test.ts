@@ -103,6 +103,16 @@ describe('session deletion lifecycle', () => {
 		expect(await store.load(SESSION_KEY)).toBeNull();
 	});
 
+	it('rejects persisted session data written by an earlier beta', async () => {
+		const store = new TrackingSessionStore();
+		await store.save(SESSION_KEY, { ...emptySessionData(), version: 3 } as unknown as SessionData);
+		const harness = createHarness(store);
+
+		await expect(harness.session('case:1')).rejects.toThrow(
+			'Session data version 3 is unsupported. Clear persisted session state created by an earlier Flue beta.',
+		);
+	});
+
 	it('preserves get-or-create semantics after a queued get misses', async () => {
 		const store = new TrackingSessionStore();
 		store.blockLoads();
@@ -163,7 +173,7 @@ function testAgentConfig(): AgentConfig {
 
 function emptySessionData(): SessionData {
 	return {
-		version: 3,
+		version: 4,
 		entries: [],
 		leafId: null,
 		metadata: {},

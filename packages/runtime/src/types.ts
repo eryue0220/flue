@@ -785,7 +785,7 @@ export interface PromptResultResponse<T> {
 // ─── Session Store ──────────────────────────────────────────────────────────
 
 export interface SessionData {
-	version: 3;
+	version: 4;
 	entries: SessionEntry[];
 	leafId: string | null;
 	metadata: Record<string, any>;
@@ -811,7 +811,6 @@ export interface MessageEntry extends SessionEntryBase {
 
 export interface DispatchMessageMetadata {
 	dispatchId: string;
-	targetAgent: string;
 	agent: string;
 	id: string;
 	session: string;

@@ -278,7 +278,7 @@ function createSessionAffinityKey(instanceId: string, harness: string, sessionNa
 function createEmptySessionData(): SessionData {
 	const now = new Date().toISOString();
 	return {
-		version: 3,
+		version: 4,
 		entries: [],
 		leafId: null,
 		metadata: {},

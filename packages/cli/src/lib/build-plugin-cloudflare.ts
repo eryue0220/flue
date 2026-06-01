@@ -192,6 +192,7 @@ import {
   handleWorkflowRequest,
   handleRunRouteRequest,
   validateAgentDispatchAdmission,
+  assertCurrentDispatchInput,
   createDispatchAgentHandler,
   reserveDispatchAgentSession,
   failRecoveredRun,
@@ -313,15 +314,15 @@ const memoryRunStore = new InMemoryRunStore();
 const INTERNAL_DISPATCH_PATH = '/__flue/internal/dispatch';
 const dispatchQueue = {
   async enqueue(input) {
-    const binding = env?.[agentBindingNameFromAgentName(input.targetAgent)];
-    if (!binding) throw new Error('[flue] dispatch() target agent "' + input.targetAgent + '" Durable Object binding is unavailable.');
+    const binding = env?.[agentBindingNameFromAgentName(input.agent)];
+    if (!binding) throw new Error('[flue] dispatch() target agent "' + input.agent + '" Durable Object binding is unavailable.');
     const stub = await getAgentByName(binding, input.id);
     const response = await stub.fetch(new Request('https://flue.invalid' + INTERNAL_DISPATCH_PATH, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(input),
     }));
-    if (!response.ok) throw new Error('[flue] dispatch() target agent "' + input.targetAgent + '" rejected durable admission with status ' + response.status + '.');
+    if (!response.ok) throw new Error('[flue] dispatch() target agent "' + input.agent + '" rejected durable admission with status ' + response.status + '.');
     return response.json();
   },
 };
@@ -437,7 +438,8 @@ function assertAgentsDurabilityApi(doInstance, method) {
 
 async function handleFlueDispatchRecovered(ctx, doInstance, agentName) {
   const input = ctx.metadata?.input;
-  if (!input || input.targetAgent !== agentName || input.id !== doInstance.name) return { status: 'error', error: 'Dispatch recovery metadata is invalid.' };
+  assertCurrentDispatchInput(input);
+  if (!input || input.agent !== agentName || input.id !== doInstance.name) return { status: 'error', error: 'Dispatch recovery metadata is invalid.' };
   try {
     await processManagedAgentDispatch(input, doInstance, agentName, ctx.id);
     return { status: 'completed' };
@@ -491,12 +493,13 @@ async function waitForEarlierManagedDispatch(doInstance, input, fiberId) {
   if (typeof doInstance.listFibers !== 'function') return;
   while (true) {
     const fibers = await doInstance.listFibers({ name: 'flue:dispatch' });
+    for (const fiber of fibers) assertCurrentDispatchInput(fiber.metadata?.input);
     const current = fibers.find((fiber) => fiber.id === fiberId);
     if (!current) return;
     const blocked = fibers.some((fiber) => {
       if (fiber.id === fiberId || fiber.status === 'completed' || fiber.status === 'error' || fiber.status === 'aborted') return false;
       const other = fiber.metadata?.input;
-      if (!other || other.targetAgent !== input.targetAgent || other.id !== input.id || other.session !== input.session) return false;
+      if (!other || other.agent !== input.agent || other.id !== input.id || other.session !== input.session) return false;
       return fiber.createdAt < current.createdAt || (fiber.createdAt === current.createdAt && fiber.id < fiberId);
     });
     if (!blocked) return;
@@ -523,7 +526,11 @@ async function processManagedAgentDispatch(input, doInstance, agentName, fiberId
 async function assertNoPendingDispatchForDirectSession(doInstance, agentName, session) {
   if (typeof doInstance.listFibers !== 'function') return;
   const fibers = await doInstance.listFibers({ name: 'flue:dispatch' });
-  if (fibers.some((fiber) => fiber.status !== 'completed' && fiber.status !== 'error' && fiber.status !== 'aborted' && fiber.metadata?.input?.targetAgent === agentName && fiber.metadata?.input?.id === doInstance.name && fiber.metadata?.input?.session === session)) {
+  for (const fiber of fibers) assertCurrentDispatchInput(fiber.metadata?.input);
+  if (fibers.some((fiber) => {
+    const input = fiber.metadata?.input;
+    return fiber.status !== 'completed' && fiber.status !== 'error' && fiber.status !== 'aborted' && input?.agent === agentName && input.id === doInstance.name && input.session === session;
+  })) {
     throw new Error('[flue] This agent session has pending dispatched input and cannot accept direct input yet.');
   }
 }
@@ -570,12 +577,14 @@ async function dispatchAgent(request, doInstance, agentName, handler) {
   const id = doInstance.name; // DO room name set by routeAgentRequest
   if (isInternalDispatchRequest(request)) {
     const input = await request.json();
-    if (input.targetAgent !== agentName || input.agent !== agentName || input.id !== id) return new Response('Invalid internal dispatch target.', { status: 400 });
+    assertCurrentDispatchInput(input);
+    if (input.agent !== agentName || input.id !== id) return new Response('Invalid internal dispatch target.', { status: 400 });
     if (!createdAgents[agentName]) return new Response('Dispatch target unavailable.', { status: 404 });
     assertAgentsDurabilityApi(doInstance, 'startFiber');
     assertAgentsDurabilityApi(doInstance, 'inspectFiberByKey');
     const idempotencyKey = 'flue:dispatch:' + input.dispatchId;
     const prior = await doInstance.inspectFiberByKey(idempotencyKey);
+    assertCurrentDispatchInput(prior?.metadata?.input);
     if (prior?.metadata?.input && JSON.stringify(prior.metadata.input) !== JSON.stringify(input)) {
       return new Response('Conflicting internal dispatch replay.', { status: 409 });
     }

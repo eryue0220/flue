@@ -34,12 +34,12 @@ describe('global dispatch', () => {
 		expect(receipt).toMatchObject({ dispatchId: expect.any(String), acceptedAt: expect.any(String) });
 		expect(dispatches).toHaveLength(1);
 		expect(dispatches[0]).toMatchObject({
-			targetAgent: 'moderator',
 			agent: 'moderator',
 			id: 'guild:1',
 			session: 'default',
 			input: { type: 'flagged' },
 		});
+		expect(dispatches[0]).not.toHaveProperty('targetAgent');
 	});
 
 	it('snapshots input at admission time and validates named dispatch requests', async () => {
@@ -72,7 +72,7 @@ describe('global dispatch', () => {
 
 		await dispatch(agent, { id: 'guild:1', session: 'case:1', input: { type: 'created' } });
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(dispatches[0]).toMatchObject({ targetAgent: 'moderator', session: 'case:1', input: { type: 'created' } });
+		expect(dispatches[0]).toMatchObject({ agent: 'moderator', session: 'case:1', input: { type: 'created' } });
 		await expect(dispatch(localAgent, { id: 'guild:1', input: null })).rejects.toThrow('not a discovered default-exported agent');
 	});
 
@@ -91,7 +91,7 @@ describe('global dispatch', () => {
 
 		const receipt = await dispatch({ agent: 'moderator', id: 'guild:1', input: null });
 		expect(receipt).toMatchObject({ dispatchId: expect.any(String), acceptedAt: expect.any(String) });
-		expect(dispatches[0]).toMatchObject({ targetAgent: 'moderator', id: 'guild:1', session: 'default', input: null });
+		expect(dispatches[0]).toMatchObject({ agent: 'moderator', id: 'guild:1', session: 'default', input: null });
 	});
 
 	it('processes dispatches by waking the target instance and session', async () => {
@@ -116,7 +116,6 @@ describe('global dispatch', () => {
 
 		await processor.process({
 			dispatchId: 'dispatch-1',
-			targetAgent: 'moderator',
 			agent: 'moderator',
 			id: 'guild:1',
 			session: 'case:1',
@@ -130,11 +129,19 @@ describe('global dispatch', () => {
 		expect(events).toEqual([]);
 	});
 
+	it('rejects dispatch metadata written by an earlier beta', async () => {
+		const input = {
+			...dispatchInput('dispatch-legacy'),
+			targetAgent: 'moderator',
+		} as DispatchInput;
+		await expect(validateAgentDispatchAdmission({ input })).rejects.toThrow('Legacy dispatch metadata is unsupported');
+		await expect(createAgentDispatchProcessor({ agents: {}, createContext: createTestContext }).process(input)).rejects.toThrow('Legacy dispatch metadata is unsupported');
+	});
+
 	it('admits durable dispatch processing without creating a run record', async () => {
 		const runStore = new InMemoryRunStore();
 		const input: DispatchInput = {
 			dispatchId: 'dispatch-durable',
-			targetAgent: 'moderator',
 			agent: 'moderator',
 			id: 'guild:1',
 			session: 'case:1',
@@ -150,7 +157,7 @@ describe('global dispatch', () => {
 	it('processes a durable dispatch with dispatch identity instead of run lifecycle', async () => {
 		const runStore = new InMemoryRunStore();
 		const input: DispatchInput = {
-			dispatchId: 'dispatch-process', targetAgent: 'moderator', agent: 'moderator', id: 'guild:1', session: 'case:1',
+			dispatchId: 'dispatch-process', agent: 'moderator', id: 'guild:1', session: 'case:1',
 			input: { text: 'one' }, acceptedAt: '2026-05-21T00:00:00.000Z',
 		};
 		let contextRunId: string | undefined = 'unread';
@@ -193,7 +200,7 @@ describe('global dispatch', () => {
 		await dispatch(agent, { id: 'guild:1', input: { type: 'global' } });
 		await new Promise((resolve) => setTimeout(resolve, 0));
 		expect(sessions).toEqual(['default']);
-		expect(processed[0]).toMatchObject({ targetAgent: 'moderator', id: 'guild:1', session: 'default', input: { type: 'global' } });
+		expect(processed[0]).toMatchObject({ agent: 'moderator', id: 'guild:1', session: 'default', input: { type: 'global' } });
 	});
 
 	it('waits to process a Node dispatch until a direct prompt in the same session finishes', async () => {
@@ -273,7 +280,7 @@ describe('global dispatch', () => {
 			agent.state.messages.push(assistantMessage());
 		};
 		agent.waitForIdle = async () => {};
-		const input: DispatchInput = { dispatchId: 'dispatch-persisted', targetAgent: 'moderator', agent: 'moderator', id: 'guild:1', session: 'case:1', input: { type: 'flagged' }, acceptedAt: '2026-05-21T00:00:00.000Z' };
+		const input: DispatchInput = { dispatchId: 'dispatch-persisted', agent: 'moderator', id: 'guild:1', session: 'case:1', input: { type: 'flagged' }, acceptedAt: '2026-05-21T00:00:00.000Z' };
 		const dispatched = session as FlueSession & { processDispatchInput(input: DispatchInput): PromiseLike<unknown> };
 
 		await dispatched.processDispatchInput(input);
@@ -292,22 +299,24 @@ describe('global dispatch', () => {
 		agent.continue = async () => { agent.state.messages.push(assistantMessage()); };
 		agent.waitForIdle = async () => {};
 		await (session as FlueSession & { processDispatchInput(input: DispatchInput): PromiseLike<unknown> }).processDispatchInput({
-			dispatchId: 'dispatch-1', targetAgent: 'moderator', agent: 'moderator', id: 'guild:1', session: 'case:1',
+			dispatchId: 'dispatch-1', agent: 'moderator', id: 'guild:1', session: 'case:1',
 			input: { z: 1, a: { b: 2, a: 1 } }, acceptedAt: '2026-05-21T00:00:00.000Z',
 		});
 
 		const data = await store.load('agent-session:["guild:1","default","case:1"]');
-		const entry = data?.entries.find((item) => item.type === 'message' && item.message.role === 'user');
-		expect(entry).toMatchObject({ type: 'message', source: 'dispatch', dispatch: { dispatchId: 'dispatch-1', targetAgent: 'moderator', agent: 'moderator', id: 'guild:1', session: 'case:1', acceptedAt: '2026-05-21T00:00:00.000Z', input: { z: 1, a: { b: 2, a: 1 } } } });
+		const entry = data?.entries.find((item): item is Extract<typeof item, { type: 'message' }> => item.type === 'message' && item.message.role === 'user');
+		expect(entry).toMatchObject({ type: 'message', source: 'dispatch', dispatch: { dispatchId: 'dispatch-1', agent: 'moderator', id: 'guild:1', session: 'case:1', acceptedAt: '2026-05-21T00:00:00.000Z', input: { z: 1, a: { b: 2, a: 1 } } } });
+		expect(entry?.dispatch).not.toHaveProperty('targetAgent');
 		const text = ((entry as any)?.message.content[0]?.text ?? '') as string;
 		expect(text).toContain('[Dispatch Input]');
+		expect(text).not.toContain('targetAgent:');
 		expect(text).toContain('dispatchId: dispatch-1');
 		expect(text).toContain('input:\n{\n  "a": {\n    "a": 1,\n    "b": 2\n  },\n  "z": 1\n}');
 	});
 });
 
 function dispatchInput(dispatchId: string): DispatchInput {
-	return { dispatchId, targetAgent: 'moderator', agent: 'moderator', id: 'guild:1', session: 'case:1', input: { type: 'flagged' }, acceptedAt: '2026-05-21T00:00:00.000Z' };
+	return { dispatchId, agent: 'moderator', id: 'guild:1', session: 'case:1', input: { type: 'flagged' }, acceptedAt: '2026-05-21T00:00:00.000Z' };
 }
 
 function assistantMessage(): AgentMessage {
