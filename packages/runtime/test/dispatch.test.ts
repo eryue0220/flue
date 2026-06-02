@@ -518,7 +518,7 @@ describe('dispatched session processing', () => {
 			const timestamp = '2026-06-01T00:00:00.000Z';
 			await store.save(`agent-session:${JSON.stringify([input.id, 'default', input.session])}`, {
 				version: 5,
-				affinityKey: 'aff_dispatch_retry_transient',
+				affinityKey: 'aff_01KT3P3GZGFBCKHKMQ11A7H2HW',
 				entries: [
 					{
 						type: 'message',
