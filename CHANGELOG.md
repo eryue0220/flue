@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes & Other Changes
+
+- Runtime events no longer carry raw image bytes (#221). Image content blocks in session events (`message_*`, `turn_request`, `turn_end`, `agent_end`, `tool_call`) keep their `mimeType` but have `data` replaced with the exported `IMAGE_DATA_OMITTED` sentinel before events reach observers and persisted run history. Model context and persisted session history retain the real bytes. Events persisted before this change are unaffected.
+
 ## 0.10.2 - 2026-06-09
 
 ### Fixes & Other Changes

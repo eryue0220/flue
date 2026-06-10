@@ -45,6 +45,7 @@ import {
 	shouldCompact,
 } from './compaction.ts';
 import { isWorkspaceSkill, skillsDirIn } from './context.ts';
+import { IMAGE_DATA_OMITTED, redactEventImages } from './event-redaction.ts';
 import {
 	buildPackagedSkillPrompt,
 	buildPromptText,
@@ -166,7 +167,8 @@ function toTurnContent(block: ProviderContentBlock): TurnContent {
 		return { type: 'text', text: block.text, textSignature: block.textSignature };
 	}
 	if (block.type === 'image') {
-		return { type: 'image', data: block.data, mimeType: block.mimeType };
+		// Events never carry raw image bytes — see redactEventImages().
+		return { type: 'image', data: IMAGE_DATA_OMITTED, mimeType: block.mimeType };
 	}
 	if (block.type === 'thinking') {
 		return {
@@ -1522,7 +1524,7 @@ export class Session implements FlueSession {
 
 	private emit(event: FlueEvent): void {
 		const decorated = {
-			...event,
+			...redactEventImages(event),
 			session: event.session ?? this.name,
 		};
 		const operationId = event.operationId ?? this.activeOperationId;

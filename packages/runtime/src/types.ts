@@ -944,6 +944,11 @@ export type LlmTurnPurpose = 'agent' | 'compaction' | 'compaction_prefix';
  * form the immutable persisted identity for one workflow event. Attached-agent
  * streams and `observe()` from `@flue/runtime` deliver live activity; their
  * indexes are per-context ordering, not durable identity.
+ *
+ * Events never carry raw image bytes. Image content blocks in event payloads
+ * keep their `mimeType` but have `data` replaced with the exported
+ * `IMAGE_DATA_OMITTED` sentinel. Session history retains the real bytes for
+ * model context.
  */
 export type FlueEvent = (
 	| {
