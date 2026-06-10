@@ -1807,10 +1807,9 @@ function loadDocsPages(root: string): DocsPage[] {
 }
 
 /**
- * Reduces markdown/MDX source to plain text for search indexing. Mirrors the
- * docs website's search index generation in
- * `apps/docs/src/pages/search-index.json.ts` so `flue docs search` ranks
- * like the website's `/docs/search` endpoint.
+ * Reduces markdown/MDX source to plain text for search indexing. This is
+ * intentionally a lightweight approximation: minor artifacts are acceptable
+ * since the output is only used for search matching and excerpts.
  */
 function docsMarkdownToPlainText(source: string): string {
 	return source

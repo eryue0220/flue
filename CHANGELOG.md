@@ -5,7 +5,6 @@
 ### New Features
 
 - **`flue docs` browses the documentation offline.** The docs markdown already shipped inside `@flue/cli` is now reachable from the command line: `flue docs` lists every page, `flue docs read <path>` prints one page as Markdown, and `flue docs search <query>` prints ranked JSON results. Content requires no network access and always matches the installed CLI version. Designed for coding agents (search → read), per [Documentation](https://flueframework.com/docs/cli/docs/).
-- The docs website now serves a search endpoint at `GET /docs/search?q=<query>` returning JSON results, alongside the existing per-page `index.md` Markdown routes.
 
 ### Fixes & Other Changes
 
