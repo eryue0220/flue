@@ -345,6 +345,12 @@ export function createNodeAgentCoordinator(options: {
 
 	async function reconcileRunningSubmissions(): Promise<void> {
 		for (const submission of await submissions.listExpiredSubmissions()) {
+			// Skip submissions still actively processing in this coordinator
+			// (possible when heartbeat renewals fail transiently and the lease
+			// expires while the task is mid-flight). Reconciling our own live
+			// submission would spawn a second concurrent task for the same
+			// session — exactly the corruption leases exist to prevent.
+			if (activeSubmissions.has(submission.submissionId)) continue;
 			const agentName = submission.input.agent;
 			const agent = agents[agentName];
 			if (!agent) {
