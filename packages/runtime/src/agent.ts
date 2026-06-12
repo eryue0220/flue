@@ -298,10 +298,14 @@ export function createTaskTool(
 	) => Promise<AgentToolResult<TaskToolResultDetails>>,
 	subagents: Record<string, AgentProfile>,
 ): AgentTool<typeof TaskParams> {
-	const agentNames = Object.keys(subagents);
+	const agentEntries = Object.entries(subagents);
 	const agentDescription =
-		agentNames.length > 0
-			? ` Available agents: ${agentNames.join(', ')}.`
+		agentEntries.length > 0
+			? `\nAvailable agents:\n${agentEntries
+					.map(([name, profile]) =>
+						profile.description ? `- ${name}: ${profile.description}` : `- ${name}`,
+					)
+					.join('\n')}`
 			: ' No subagents are currently defined.';
 
 	return {

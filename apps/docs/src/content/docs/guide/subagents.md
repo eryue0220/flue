@@ -30,6 +30,8 @@ export default createAgent(() => ({
 
 In this example, `support-assistant` can delegate work to `issue_classifier`. The profile configures the specialist used for delegated tasks; it does not define another agent at `/agents/issue_classifier/:id`.
 
+The profile's `description` is shown to the parent model alongside the subagent's name, so write it as delegation guidance: a short statement of what the subagent is good for.
+
 ## Delegate work
 
 An agent with configured subagents can decide to delegate while answering a prompt. Flue gives the agent a built-in `task` capability that starts a child session for the selected subagent and returns that child's answer to the parent agent.
