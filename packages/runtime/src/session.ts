@@ -27,7 +27,6 @@ import {
 	createPackagedSkillReadTool,
 	createTaskTool,
 	createTools,
-	formatBashResult,
 	type TaskToolParams,
 	type TaskToolResultDetails,
 } from './agent.ts';
@@ -90,6 +89,7 @@ import { reconstructInterruptedStream, StreamChunkWriter } from './runtime/strea
 import { createFlueFs } from './sandbox.ts';
 import { createUserContextMessage, renderSignalMessage, SessionHistory } from './session-history.ts';
 import { childTaskSessionStorageKey } from './session-identity.ts';
+import { execShellWithEvents, getErrorMessage } from './shell.ts';
 import { normalizeToolDefinition } from './tool.ts';
 import type {
 	AgentConfig,
@@ -898,77 +898,27 @@ export class Session implements FlueSession, AgentSubmissionSession {
 
 	shell(command: string, options?: ShellOptions): CallHandle<ShellResult> {
 		return createCallHandle(options?.signal, (signal) =>
-			this.runOperation('shell', signal, async () => {
+			this.runOperation('shell', signal, () =>
 				// session.shell() is an out-of-band tool invocation: the caller
 				// (agent code) decides to run a bash command, but it should
 				// appear in the message history as if the model itself had
 				// called the bash tool. That keeps the transcript readable for
 				// later turns, lets compaction handle it via the same path as
 				// real tool calls, and removes the synthetic-user-message
-				// shape that earlier versions of this method produced.
-				//
-				const toolCallId = crypto.randomUUID();
-				const toolStartMs = Date.now();
-
-				// Per-call cwd/env names, when set, are part of the call's
-				// identity and need to be visible in the transcript. Env
-				// values often contain credentials, so transcript/tool events
-				// record only the keys while env.exec receives the real values.
-				// The bash tool's own schema (BashParams) doesn't formally
-				// declare these, but pi-ai's ToolCall.arguments is
-				// `Record<string, any>` and providers forward arguments
-				// opaquely, so extending the shape here is safe.
-				const args: Record<string, unknown> = { command };
-				if (options?.cwd !== undefined) args.cwd = options.cwd;
-				if (options?.env !== undefined) args.env = redactEnvValues(options.env);
-
-				this.emit({ type: 'tool_start', toolName: 'bash', toolCallId, args });
-
-				try {
-					const result = await this.env.exec(command, {
-						env: options?.env,
-						cwd: options?.cwd,
-						timeoutMs: options?.timeoutMs,
-						signal,
-					});
-					const shellResult: ShellResult = {
-						stdout: result.stdout,
-						stderr: result.stderr,
-						exitCode: result.exitCode,
-					};
-					const toolResult = formatBashResult(shellResult, command);
-					await this.appendShellTriple(toolCallId, args, toolResult, false);
-					this.emit({
-						type: 'tool',
-						toolName: 'bash',
-						toolCallId,
-						isError: false,
-						result: toolResult,
-						durationMs: durationSince(toolStartMs),
-					});
-					return shellResult;
-				} catch (error) {
-					// Aligns with formatBashResult's `details: { command, exitCode }`
-					// shape so consumers reading event.result.details.exitCode see a
-					// number on both branches. -1 is the conventional sentinel for
-					// "no exit recorded" (the same one env.exec uses internally for
-					// sandbox-level failures — see sandbox.ts).
-					const errResult: AgentToolResult<any> = {
-						content: [{ type: 'text', text: getErrorMessage(error) }],
-						details: { command, exitCode: -1 },
-					};
-					await this.appendShellTriple(toolCallId, args, errResult, true);
-					this.emit({
-						type: 'tool',
-						toolName: 'bash',
-						toolCallId,
-						isError: true,
-						result: errResult,
-						durationMs: durationSince(toolStartMs),
-					});
-					throw error;
-				}
-			}),
+				// shape that earlier versions of this method produced. The
+				// record hook appends the transcript triple before each
+				// terminal tool event; harness.shell() shares the same
+				// envelope without it.
+				execShellWithEvents(
+					this.env,
+					(event) => this.emit(event),
+					command,
+					options,
+					signal,
+					(toolCallId, args, result, isError) =>
+						this.appendShellTriple(toolCallId, args, result, isError),
+				),
+			),
 		);
 	}
 
@@ -2409,10 +2359,6 @@ export async function deleteSessionTree(
 	await store.delete(storageKey);
 }
 
-function getErrorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
-
 function serializeError(error: unknown): unknown {
 	if (error instanceof Error) {
 		return { name: error.name, message: error.message };
@@ -2446,8 +2392,4 @@ function isPromptUsage(value: unknown): value is PromptUsage {
 		typeof (value as PromptUsage).output === 'number' &&
 		typeof (value as PromptUsage).totalTokens === 'number'
 	);
-}
-
-function redactEnvValues(env: Record<string, string>): Record<string, string> {
-	return Object.fromEntries(Object.keys(env).map((key) => [key, '<redacted>']));
 }
