@@ -42,6 +42,8 @@ This is why communication overhead is top of mind again in 2026. When good decis
 
 This is also why we ask contributors for issues and discussions instead of pull requests. Both are inputs that help us decide what to work on next. We can combine those inputs with our existing context as domain experts, plus the best available SOTA LLMs that we have access to. Starting from the problem gives us more room to correctly guide the agent during research, design, implementation, and initial review. Reviewing an existing PR (even an amazing one) blocks us from that essential work.
 
+## Sustainability & Growth
+
 Quoting from [the C2 wiki](https://wiki.c2.com/?SurgicalTeam):
 
 > In software terms, this means you have a lead who runs the project, makes the critical decisions and to BeInCharge. A co-lead is present as a hedge against the loss of the lead (see TruckNumber) and who is there to help with design but not control. The rest of the teams role is, in essence, to let him (or her!) do that job. The junior developers are involved in the process - so they can see how analysis becomes design becomes code, but the complex code will be written by the lead. There will be other specialists - tool builders, technical authors and so on to remove workload from the lead and allow them to concentrate on the major problem at hand.
