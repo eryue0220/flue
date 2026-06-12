@@ -140,6 +140,28 @@ describe('cfSandboxToSessionEnv()', () => {
 		});
 	});
 
+	it('issues a single well-formed rm -rf command when recursive and force are both requested', async () => {
+		const exec = vi.fn(async () => ({ success: true, stdout: '', stderr: '' }));
+		const env = await cfSandboxToSessionEnv({ exec }, '/workspace/project');
+
+		await env.rm('tmp', { recursive: true, force: true });
+
+		expect(exec).toHaveBeenCalledWith(`rm -rf '/workspace/project/tmp'`);
+	});
+
+	it('rejects when the remote rm command fails', async () => {
+		const exec = vi.fn(async () => ({
+			success: false,
+			stdout: '',
+			stderr: 'rm: cannot remove /workspace/project/tmp: Permission denied',
+		}));
+		const env = await cfSandboxToSessionEnv({ exec }, '/workspace/project');
+
+		await expect(env.rm('tmp', { recursive: true })).rejects.toThrow(
+			'rm failed for /workspace/project/tmp: rm: cannot remove /workspace/project/tmp: Permission denied',
+		);
+	});
+
 	it('rejects after execution when a signal-blind Cloudflare sandbox is aborted in flight', async () => {
 		let markStarted: () => void = () => {};
 		const started = new Promise<void>((resolve) => {

@@ -82,8 +82,11 @@ export async function cfSandboxToSessionEnv(
 
 		async rm(path: string, opts?: { recursive?: boolean; force?: boolean }): Promise<void> {
 			if (opts?.recursive || opts?.force) {
-				const flags = [opts.recursive ? '-r' : '', opts.force ? '-f' : ''].filter(Boolean).join('');
-				await sandbox.exec(`rm ${flags} '${path.replace(/'/g, "'\\''")}'`);
+				const flags = `-${opts.recursive ? 'r' : ''}${opts.force ? 'f' : ''}`;
+				const result = await sandbox.exec(`rm ${flags} '${path.replace(/'/g, "'\\''")}'`);
+				if (!result.success) {
+					throw new Error(`rm failed for ${path}: ${result.stderr}`);
+				}
 			} else {
 				await sandbox.deleteFile(path);
 			}
