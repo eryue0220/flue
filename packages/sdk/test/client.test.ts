@@ -162,6 +162,27 @@ describe('createFlueClient', () => {
 			expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
 		});
 
+		it('delivers events in call order when next() is called concurrently', async () => {
+			const client = createFlueClient({
+				baseUrl: 'https://flue.test',
+				fetch: async () => dsJsonResponse([{ type: 'agent_start' }, { type: 'turn_start' }, { type: 'idle' }]),
+			});
+
+			// The async-iterator protocol permits issuing next() before the
+			// previous call settles (e.g. read-ahead buffering); concurrent
+			// calls must queue onto sequential results instead of dropping a
+			// waiter or surfacing an internal error.
+			const iterator = client.agents.stream('agent', 'id', { live: false })[Symbol.asyncIterator]();
+			const results = await Promise.all([iterator.next(), iterator.next(), iterator.next(), iterator.next()]);
+
+			expect(results).toEqual([
+				{ value: { type: 'agent_start' }, done: false },
+				{ value: { type: 'turn_start' }, done: false },
+				{ value: { type: 'idle' }, done: false },
+				{ value: undefined, done: true },
+			]);
+		});
+
 		it('tracks the latest stream offset after reading an event', async () => {
 			const client = createFlueClient({
 				baseUrl: 'https://flue.test',

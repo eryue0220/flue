@@ -192,87 +192,98 @@ export function createFlueEventStream<T = FlueEvent>(
 		);
 	};
 
-	const iterator: AsyncIterator<T> = {
-		async next(): Promise<IteratorResult<T>> {
-			while (true) {
-				if (abortController.signal.aborted) {
-					removeExternalAbortListener?.();
-					return { value: undefined as T, done: true };
-				}
-
-				if (!started) {
-					started = true;
-					try {
-						startConsuming(await connect());
-					} catch (err) {
-						// Allow a later next() call to surface the same rejection
-						// again instead of waiting forever for batches that will
-						// never arrive.
-						started = false;
-						removeExternalAbortListener?.();
-						if (abortController.signal.aborted || isAbortError(err)) {
-							return { value: undefined as T, done: true };
-						}
-						throw err;
-					}
-				}
-
-				if (pending) {
-					const value = pending.items[pending.next++] as T;
-					if (pending.next >= pending.items.length) {
-						currentOffset = pending.offset;
-						if (pending.final) {
-							finalBatch = { ...pending.final, offset: pending.offset };
-							deliveryDone = true;
-						}
-						pending = undefined;
-						releaseBatch();
-					}
-					return { value, done: false };
-				}
-
-				if (deliveryDone) {
-					if (streamFailure) {
-						const { error } = streamFailure;
-						streamFailure = undefined;
-						removeExternalAbortListener?.();
-						if (abortController.signal.aborted || isAbortError(error)) {
-							return { value: undefined as T, done: true };
-						}
-						throw error;
-					}
-					// The DS client makes exactly one request per `live: false`
-					// stream, even when the server caps the catch-up batch and
-					// reports more data remains (no Stream-Up-To-Date header).
-					// Reconnect from the latest offset until up-to-date.
-					if (streamOpts.live === false && finalBatch && !finalBatch.upToDate && finalBatch.offset !== connectOffset) {
-						connectOffset = finalBatch.offset;
-						responsePromise = undefined;
-						started = false;
-						deliveryDone = false;
-						fetchDone = false;
-						finalBatch = undefined;
-						continue;
-					}
-					removeExternalAbortListener?.();
-					return { value: undefined as T, done: true };
-				}
-
-				if (fetchDone && streamOpts.live === 'sse') {
-					// SSE backstop: the connection ended without a stream-closed
-					// control event. Let any remaining synthetic batches land
-					// (they resolve within microtasks), then finish.
-					await new Promise<void>((resolve) => setTimeout(resolve, 0));
-					if (pending || deliveryDone || abortController.signal.aborted) continue;
-					removeExternalAbortListener?.();
-					return { value: undefined as T, done: true };
-				}
-
-				// Wait for the next batch, stream end, or cancellation.
-				await new Promise<void>((resolve) => {
-					notify = resolve;
-				});
+	const nextResult = async (): Promise<IteratorResult<T>> => {
+		while (true) {
+			if (abortController.signal.aborted) {
+				removeExternalAbortListener?.();
+				return { value: undefined as T, done: true };
 			}
+
+			if (!started) {
+				started = true;
+				try {
+					startConsuming(await connect());
+				} catch (err) {
+					// Allow a later next() call to surface the same rejection
+					// again instead of waiting forever for batches that will
+					// never arrive.
+					started = false;
+					removeExternalAbortListener?.();
+					if (abortController.signal.aborted || isAbortError(err)) {
+						return { value: undefined as T, done: true };
+					}
+					throw err;
+				}
+			}
+
+			if (pending) {
+				const value = pending.items[pending.next++] as T;
+				if (pending.next >= pending.items.length) {
+					currentOffset = pending.offset;
+					if (pending.final) {
+						finalBatch = { ...pending.final, offset: pending.offset };
+						deliveryDone = true;
+					}
+					pending = undefined;
+					releaseBatch();
+				}
+				return { value, done: false };
+			}
+
+			if (deliveryDone) {
+				if (streamFailure) {
+					const { error } = streamFailure;
+					streamFailure = undefined;
+					removeExternalAbortListener?.();
+					if (abortController.signal.aborted || isAbortError(error)) {
+						return { value: undefined as T, done: true };
+					}
+					throw error;
+				}
+				// The DS client makes exactly one request per `live: false`
+				// stream, even when the server caps the catch-up batch and
+				// reports more data remains (no Stream-Up-To-Date header).
+				// Reconnect from the latest offset until up-to-date.
+				if (streamOpts.live === false && finalBatch && !finalBatch.upToDate && finalBatch.offset !== connectOffset) {
+					connectOffset = finalBatch.offset;
+					responsePromise = undefined;
+					started = false;
+					deliveryDone = false;
+					fetchDone = false;
+					finalBatch = undefined;
+					continue;
+				}
+				removeExternalAbortListener?.();
+				return { value: undefined as T, done: true };
+			}
+
+			if (fetchDone && streamOpts.live === 'sse') {
+				// SSE backstop: the connection ended without a stream-closed
+				// control event. Let any remaining synthetic batches land
+				// (they resolve within microtasks), then finish.
+				await new Promise<void>((resolve) => setTimeout(resolve, 0));
+				if (pending || deliveryDone || abortController.signal.aborted) continue;
+				removeExternalAbortListener?.();
+				return { value: undefined as T, done: true };
+			}
+
+			// Wait for the next batch, stream end, or cancellation.
+			await new Promise<void>((resolve) => {
+				notify = resolve;
+			});
+		}
+	};
+
+	// The async-iterator protocol permits calling next() again before the
+	// previous call settles, but the body above is not reentrant: `notify`
+	// holds a single waiter, so a second concurrent call would silently drop
+	// the first. Serialize calls so each runs only after the previous settles.
+	let lastNext: Promise<unknown> | undefined;
+	const iterator: AsyncIterator<T> = {
+		next(): Promise<IteratorResult<T>> {
+			const result = lastNext ? lastNext.then(nextResult, nextResult) : nextResult();
+			lastNext = result.catch(() => {});
+			return result;
 		},
 		async return(): Promise<IteratorResult<T>> {
 			cancel();
