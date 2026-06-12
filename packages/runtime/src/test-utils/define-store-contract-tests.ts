@@ -32,7 +32,6 @@ function dispatchInput(overrides: Partial<DispatchInput> = {}): DispatchInput {
 		dispatchId: 'dispatch-1',
 		agent: 'assistant',
 		id: 'agent-1',
-		session: 'default',
 		input: { text: 'Hello' },
 		acceptedAt: '2026-06-03T00:00:00.000Z',
 		...overrides,
@@ -45,7 +44,6 @@ function directInput(overrides: Partial<DirectAgentSubmissionInput> = {}): Direc
 		submissionId: 'direct-1',
 		agent: 'assistant',
 		id: 'agent-1',
-		session: 'default',
 		payload: { message: 'Hello' },
 		acceptedAt: '2026-06-03T00:00:00.000Z',
 		...overrides,
@@ -208,7 +206,7 @@ export function defineStoreContractTests(
 				const direct = await store.submissions.admitDirect(directInput());
 				await store.submissions.admitDispatch(dispatchInput());
 				const other = await store.submissions.admitDirect(
-					directInput({ submissionId: 'direct-2', session: 'other' }),
+					directInput({ submissionId: 'direct-2', id: 'agent-2' }),
 				);
 				expect(await store.submissions.listRunnableSubmissions()).toEqual([direct, other]);
 				expect(await store.submissions.claimSubmission(claim('dispatch-1', 'attempt-blocked'))).toBeNull();
@@ -218,7 +216,7 @@ export function defineStoreContractTests(
 				const store = await create();
 				await store.submissions.admitDispatch(dispatchInput());
 				await store.submissions.admitDispatch(dispatchInput({ dispatchId: 'dispatch-2' }));
-				await store.submissions.admitDispatch(dispatchInput({ dispatchId: 'dispatch-3', session: 'other' }));
+				await store.submissions.admitDispatch(dispatchInput({ dispatchId: 'dispatch-3', id: 'agent-2' }));
 
 				expect(await store.submissions.listRunnableSubmissions()).toEqual([
 					expect.objectContaining({ submissionId: 'dispatch-1' }),
@@ -234,7 +232,7 @@ export function defineStoreContractTests(
 				const store = await create();
 				await store.submissions.admitDispatch(dispatchInput());
 				await store.submissions.admitDispatch(dispatchInput({ dispatchId: 'dispatch-2' }));
-				await store.submissions.admitDispatch(dispatchInput({ dispatchId: 'dispatch-3', session: 'other' }));
+				await store.submissions.admitDispatch(dispatchInput({ dispatchId: 'dispatch-3', id: 'agent-2' }));
 
 				const first = await store.submissions.claimSubmission(claim('dispatch-1', 'attempt-1'));
 				const blocked = await store.submissions.claimSubmission(claim('dispatch-2', 'attempt-2'));
@@ -281,7 +279,7 @@ export function defineStoreContractTests(
 			it('requeues interrupted attempts only before canonical input application', async () => {
 				const store = await create();
 				await store.submissions.admitDispatch(dispatchInput({ dispatchId: 'requeue-safe' }));
-				await store.submissions.admitDispatch(dispatchInput({ dispatchId: 'requeue-unsafe', session: 'other' }));
+				await store.submissions.admitDispatch(dispatchInput({ dispatchId: 'requeue-unsafe', id: 'agent-2' }));
 				await store.submissions.claimSubmission(claim('requeue-safe', 'attempt-safe'));
 				await store.submissions.claimSubmission(claim('requeue-unsafe', 'attempt-unsafe'));
 				await store.submissions.markSubmissionInputApplied(attempt('requeue-unsafe', 'attempt-unsafe'));

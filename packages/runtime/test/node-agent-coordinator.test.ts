@@ -117,7 +117,6 @@ function makeDispatchInput(overrides: Partial<DispatchInput> = {}): DispatchInpu
 		dispatchId: `dispatch-${crypto.randomUUID()}`,
 		agent: 'assistant',
 		id: 'instance-1',
-		session: 'default',
 		input: { message: 'Hello' },
 		acceptedAt: new Date().toISOString(),
 		...overrides,
@@ -805,7 +804,6 @@ leaseExpiresAt: 1,
 				submissionId: 'direct-interrupted',
 				agent: 'assistant',
 				id: 'instance-1',
-				session: 'default',
 				payload: { message: 'Hello interrupted' },
 				acceptedAt: new Date().toISOString(),
 			});
@@ -838,7 +836,6 @@ leaseExpiresAt: 1,
 				submissionId: 'direct-terminalized',
 				agent: 'assistant',
 				id: 'instance-1',
-				session: 'default',
 				payload: { message: 'Hello terminalized' },
 				acceptedAt: new Date().toISOString(),
 			});
@@ -874,7 +871,6 @@ leaseExpiresAt: 1,
 				submissionId: 'direct-no-observer',
 				agent: 'assistant',
 				id: 'instance-1',
-				session: 'default',
 				payload: { message: 'Hello silent' },
 				acceptedAt: new Date().toISOString(),
 			});
@@ -906,7 +902,6 @@ leaseExpiresAt: 1,
 				submissionId: 'direct-head',
 				agent: 'assistant',
 				id: 'instance-1',
-				session: 'default',
 				payload: { message: 'Direct first' },
 				acceptedAt: new Date().toISOString(),
 			});
@@ -920,7 +915,6 @@ leaseExpiresAt: 1,
 			// Admit a dispatch to the same session.
 			const dispatchInput = makeDispatchInput({
 				dispatchId: 'dispatch-queued-behind',
-				session: 'default',
 			});
 			await store.submissions.admitDispatch(dispatchInput);
 

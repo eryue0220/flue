@@ -20,7 +20,6 @@ export async function enqueueDispatch(options: {
 		dispatchId: crypto.randomUUID(),
 		agent,
 		id: options.request.id,
-		session: 'default',
 		input,
 		acceptedAt: new Date().toISOString(),
 	});

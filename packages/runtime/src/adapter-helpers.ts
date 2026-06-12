@@ -23,6 +23,14 @@ import { DirectAgentPayloadSchema } from './runtime/schemas.ts';
  */
 export const SUBMISSION_HARNESS_NAME = 'default';
 
+/**
+ * Agent-mode submissions always target the default session of the
+ * default harness; external submissions cannot select a session.
+ *
+ * Exported for adapter implementations that construct session storage keys.
+ */
+export const SUBMISSION_SESSION_NAME = 'default';
+
 // ─── Payload validation ─────────────────────────────────────────────────────
 
 /**
@@ -58,11 +66,10 @@ export function isSubmissionPayload(
 			value.dispatchId === value.submissionId &&
 			typeof value.agent === 'string' &&
 			typeof value.id === 'string' &&
-			typeof value.session === 'string' &&
 			createSessionStorageKey(
 				value.id as string,
 				SUBMISSION_HARNESS_NAME,
-				value.session as string,
+				SUBMISSION_SESSION_NAME,
 			) === ctx.sessionKey &&
 			typeof value.acceptedAt === 'string' &&
 			Date.parse(value.acceptedAt as string) === ctx.acceptedAt &&
@@ -73,11 +80,10 @@ export function isSubmissionPayload(
 	return (
 		typeof value.agent === 'string' &&
 		typeof value.id === 'string' &&
-		typeof value.session === 'string' &&
 		createSessionStorageKey(
 			value.id as string,
 			SUBMISSION_HARNESS_NAME,
-			value.session as string,
+			SUBMISSION_SESSION_NAME,
 		) === ctx.sessionKey &&
 		typeof value.acceptedAt === 'string' &&
 		Date.parse(value.acceptedAt as string) === ctx.acceptedAt &&

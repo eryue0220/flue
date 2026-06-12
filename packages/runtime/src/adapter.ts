@@ -56,6 +56,7 @@ export {
 	isSubmissionPayload,
 	parseAcceptedAt,
 	SUBMISSION_HARNESS_NAME,
+	SUBMISSION_SESSION_NAME,
 } from './adapter-helpers.ts';
 
 export type { SubmissionPayloadContext } from './adapter-helpers.ts';

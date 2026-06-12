@@ -56,6 +56,7 @@ import {
 	MAX_LIST_LIMIT,
 	parseAcceptedAt,
 	SUBMISSION_HARNESS_NAME,
+	SUBMISSION_SESSION_NAME,
 } from '@flue/runtime/adapter';
 import pgDriver from 'postgres';
 
@@ -860,7 +861,7 @@ class PgSubmissionStore implements AgentSubmissionStore {
 		const { kind, submissionId } = input;
 		const payload = JSON.stringify(input);
 		const acceptedAt = parseAcceptedAt(input.acceptedAt, `${kind} admission`);
-		const sessionKey = createSessionStorageKey(input.id, SUBMISSION_HARNESS_NAME, input.session);
+		const sessionKey = createSessionStorageKey(input.id, SUBMISSION_HARNESS_NAME, SUBMISSION_SESSION_NAME);
 
 		return this.runner.transaction(async (tx) => {
 			if (kind === 'dispatch') {

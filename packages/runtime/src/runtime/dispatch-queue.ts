@@ -4,7 +4,6 @@ export interface DispatchInput {
 	dispatchId: string;
 	agent: string;
 	id: string;
-	session: string;
 	input: unknown;
 	acceptedAt: string;
 }

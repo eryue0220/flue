@@ -113,7 +113,6 @@ describe('dispatch()', () => {
 			{
 				agent: 'moderator',
 				id: 'guild:created',
-				session: 'default',
 				input: { type: 'flagged', reportId: 'report:created' },
 			},
 		]);
@@ -280,7 +279,6 @@ describe('dispatched session processing', () => {
 			dispatchId: 'dispatch:input-marker-order',
 			agent: 'moderator',
 			id: 'guild:input-marker-order',
-			session: 'default',
 			input: { type: 'flagged', reportId: 'report:input-marker-order' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
@@ -339,7 +337,6 @@ describe('dispatched session processing', () => {
 			submissionId: 'direct:input-marker-order',
 			agent: 'moderator',
 			id: 'guild:direct-input-marker-order',
-			session: 'default',
 			payload: { message: 'Hello directly' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
@@ -367,7 +364,7 @@ describe('dispatched session processing', () => {
 			}),
 		)(ctx);
 
-		const data = await store.load(`agent-session:${JSON.stringify([input.id, 'default', input.session])}`);
+		const data = await store.load(`agent-session:${JSON.stringify([input.id, 'default', 'default'])}`);
 		expect(order.indexOf('persist-input')).toBeLessThan(order.indexOf('input-applied'));
 		expect(order.indexOf('input-applied')).toBeLessThan(order.indexOf('provider'));
 		expect(data?.entries[0]).toMatchObject({
@@ -385,7 +382,6 @@ describe('dispatched session processing', () => {
 			submissionId: 'direct:terminal-advisory',
 			agent: 'moderator',
 			id: 'guild:terminal-advisory',
-			session: 'default',
 			payload: { message: 'Hello directly' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
@@ -412,7 +408,7 @@ describe('dispatched session processing', () => {
 		await createAgentSubmissionSessionHandler(agent, input, (s) => s.recordSubmissionTerminal(terminal))(createContext());
 		await createAgentSubmissionSessionHandler(agent, input, (s) => s.recordSubmissionTerminal(terminal))(createContext());
 
-		const data = await store.load(`agent-session:${JSON.stringify([input.id, 'default', input.session])}`);
+		const data = await store.load(`agent-session:${JSON.stringify([input.id, 'default', 'default'])}`);
 		expect(data?.entries).toHaveLength(1);
 		expect(data?.entries[0]).toMatchObject({
 			submissionTerminal: {
@@ -436,12 +432,11 @@ describe('dispatched session processing', () => {
 			submissionId: 'direct:inspect-completed',
 			agent: 'moderator',
 			id: 'guild:direct-inspect-completed',
-			session: 'default',
 			payload: { message: 'Hello directly' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
 		const timestamp = '2026-06-01T00:00:00.000Z';
-		await store.save(`agent-session:${JSON.stringify([input.id, 'default', input.session])}`, {
+		await store.save(`agent-session:${JSON.stringify([input.id, 'default', 'default'])}`, {
 			version: 5,
 			affinityKey: 'aff_01KT3P3GZGFBCKHKMQ11A7H2HW',
 			entries: [
@@ -490,12 +485,11 @@ describe('dispatched session processing', () => {
 			dispatchId: 'dispatch:inspect-completed',
 			agent: 'moderator',
 			id: 'guild:inspect-completed',
-			session: 'default',
 			input: { type: 'flagged', reportId: 'report:inspect-completed' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
 		const timestamp = '2026-06-01T00:00:00.000Z';
-		await store.save(`agent-session:${JSON.stringify([input.id, 'default', input.session])}`, {
+		await store.save(`agent-session:${JSON.stringify([input.id, 'default', 'default'])}`, {
 			version: 5,
 			affinityKey: 'aff_01KT3P3GZGFBCKHKMQ11A7H2HW',
 			entries: [
@@ -505,7 +499,7 @@ describe('dispatched session processing', () => {
 					parentId: null,
 					timestamp,
 					message: { role: 'user', content: [{ type: 'text', text: 'persisted dispatch' }], timestamp: 0 },
-					dispatch: input,
+					dispatch: { ...input, session: 'default' },
 				},
 				{
 					type: 'message',
@@ -545,12 +539,11 @@ describe('dispatched session processing', () => {
 			dispatchId: 'dispatch:inspect-applied',
 			agent: 'moderator',
 			id: 'guild:inspect-applied',
-			session: 'default',
 			input: { type: 'flagged', reportId: 'report:inspect-applied' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
 		const timestamp = '2026-06-01T00:00:00.000Z';
-		await store.save(`agent-session:${JSON.stringify([input.id, 'default', input.session])}`, {
+		await store.save(`agent-session:${JSON.stringify([input.id, 'default', 'default'])}`, {
 			version: 5,
 			affinityKey: 'aff_01KT3P3GZGFBCKHKMQ11A7H2HW',
 			entries: [
@@ -560,7 +553,7 @@ describe('dispatched session processing', () => {
 					parentId: null,
 					timestamp,
 					message: { role: 'user', content: [{ type: 'text', text: 'persisted dispatch' }], timestamp: 0 },
-					dispatch: input,
+					dispatch: { ...input, session: 'default' },
 				},
 			],
 			leafId: 'dispatch-input',
@@ -695,7 +688,6 @@ describe('repairInterruptedToolCalls()', () => {
 			submissionId: 'dispatch:repair-all',
 			agent: 'moderator',
 			id: 'guild:repair',
-			session: 'default',
 			input: { type: 'flagged' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
@@ -763,7 +755,6 @@ describe('repairInterruptedToolCalls()', () => {
 			submissionId: 'dispatch:repair-partial',
 			agent: 'moderator',
 			id: 'guild:repair',
-			session: 'default',
 			input: { type: 'flagged' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
@@ -833,7 +824,6 @@ describe('repairInterruptedToolCalls()', () => {
 			submissionId: 'dispatch:repair-order',
 			agent: 'moderator',
 			id: 'guild:repair',
-			session: 'default',
 			input: { type: 'flagged' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
@@ -899,7 +889,6 @@ describe('repairInterruptedToolCalls()', () => {
 			submissionId: 'dispatch:repair-noop',
 			agent: 'moderator',
 			id: 'guild:repair',
-			session: 'default',
 			input: { type: 'flagged' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
@@ -954,7 +943,6 @@ describe('repairInterruptedToolCalls()', () => {
 			dispatchId: 'dispatch:journal-order',
 			agent: 'moderator',
 			id: 'guild:journal-order',
-			session: 'default',
 			input: { type: 'flagged' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};
@@ -1024,7 +1012,6 @@ describe('repairInterruptedToolCalls()', () => {
 			dispatchId: 'dispatch:journal-phases',
 			agent: 'moderator',
 			id: 'guild:journal-phases',
-			session: 'default',
 			input: { type: 'flagged' },
 			acceptedAt: '2026-06-01T00:00:00.000Z',
 		};

@@ -4,6 +4,7 @@ import type {
 	SubmissionAttemptRef,
 	SubmissionDurability,
 } from '../agent-execution-store.ts';
+import { SUBMISSION_SESSION_NAME } from '../adapter-helpers.ts';
 import type { FlueContextInternal } from '../client.ts';
 import type {
 	AttachedAgentEvent,
@@ -24,7 +25,6 @@ export interface DirectAgentSubmissionInput {
 	readonly submissionId: string;
 	readonly agent: string;
 	readonly id: string;
-	readonly session: string;
 	readonly payload: DirectAgentPayload;
 	readonly acceptedAt: string;
 }
@@ -131,7 +131,6 @@ export function createDirectAgentSubmissionInput(options: {
 		submissionId: crypto.randomUUID(),
 		agent: options.agent,
 		id: options.id,
-		session: 'default',
 		payload: options.payload,
 		acceptedAt: new Date().toISOString(),
 	};
@@ -646,7 +645,8 @@ async function openAgentSubmissionSession(
 	input: AgentSubmissionInput,
 ): Promise<AgentSubmissionSession> {
 	const harness = await ctx.initializeCreatedAgent(agent, undefined);
-	const session = await harness.session(input.session);
+	// External submissions always target the default session of the default harness.
+	const session = await harness.session(SUBMISSION_SESSION_NAME);
 	if (!session || typeof session !== 'object') {
 		throw new Error('[flue] Internal session is unavailable for submission processing.');
 	}

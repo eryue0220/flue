@@ -50,7 +50,6 @@ function dispatchInput(overrides: Partial<DispatchInput> = {}): DispatchInput {
 		dispatchId: 'dispatch-1',
 		agent: 'assistant',
 		id: 'agent-1',
-		session: 'default',
 		input: { text: 'Hello' },
 		acceptedAt: '2026-06-03T00:00:00.000Z',
 		...overrides,
@@ -228,7 +227,6 @@ describe('createSqlAgentExecutionStore()', () => {
 			submissionId: 'direct-1',
 			agent: 'assistant',
 			id: 'agent-1',
-			session: 'default',
 			acceptedAt: '2026-06-03T00:00:00.000Z',
 			payload: {
 				message: 'hello',
@@ -267,7 +265,6 @@ describe('createSqlAgentExecutionStore()', () => {
 			submissionId: 'direct-many-images',
 			agent: 'assistant',
 			id: 'agent-1',
-			session: 'default',
 			acceptedAt: '2026-06-03T00:00:00.000Z',
 			payload: {
 				message: 'hello',

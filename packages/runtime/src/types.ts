@@ -723,6 +723,7 @@ export interface DispatchMessageMetadata {
 	dispatchId: string;
 	agent: string;
 	id: string;
+	/** Always `'default'`: dispatched inputs target the default session. */
 	session: string;
 	acceptedAt: string;
 	input: unknown;

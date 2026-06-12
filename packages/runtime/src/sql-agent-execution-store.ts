@@ -30,6 +30,7 @@ import {
 } from './agent-execution-store.ts';
 import {
 	SUBMISSION_HARNESS_NAME,
+	SUBMISSION_SESSION_NAME,
 	deduplicateSessionDeletion,
 	isSubmissionPayload,
 	parseAcceptedAt,
@@ -717,7 +718,7 @@ class AgentSubmissionStoreImpl implements AgentSubmissionStore {
 			: { value: input, chunks: [] };
 		const payload = JSON.stringify(extracted.value);
 		const acceptedAt = parseAcceptedAt(input.acceptedAt, `${kind} admission`);
-		const sessionKey = createSessionStorageKey(input.id, SUBMISSION_HARNESS_NAME, input.session);
+		const sessionKey = createSessionStorageKey(input.id, SUBMISSION_HARNESS_NAME, SUBMISSION_SESSION_NAME);
 		return this.transactionSync(() => {
 			if (kind === 'dispatch') {
 				const receipt = this.getDispatchReceipt(submissionId);

@@ -41,8 +41,6 @@ function isDispatchInput(value: unknown): value is DispatchInput {
 		input.agent.trim() !== '' &&
 		typeof input.id === 'string' &&
 		input.id.trim() !== '' &&
-		typeof input.session === 'string' &&
-		input.session.trim() !== '' &&
 		input.input !== undefined &&
 		typeof input.acceptedAt === 'string' &&
 		input.acceptedAt.trim() !== ''

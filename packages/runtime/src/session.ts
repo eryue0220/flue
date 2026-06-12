@@ -287,7 +287,7 @@ function createDispatchInputSignal(input: DispatchInput): SignalMessage {
 		attributes: {
 			agent: input.agent,
 			id: input.id,
-			session: input.session,
+			session: 'default',
 			dispatchId: input.dispatchId,
 			acceptedAt: input.acceptedAt,
 		},
@@ -301,7 +301,7 @@ function dispatchMetadata(input: DispatchInput): DispatchMessageMetadata {
 		dispatchId: input.dispatchId,
 		agent: input.agent,
 		id: input.id,
-		session: input.session,
+		session: 'default',
 		acceptedAt: input.acceptedAt,
 		input: input.input,
 	};
