@@ -193,10 +193,12 @@ async function* iterateSseChunks(body: ReadableStream<Uint8Array>): AsyncIterabl
 	const reader = body.getReader();
 	const decoder = new TextDecoder();
 	let buffer = '';
+	let finished = false;
 	try {
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) {
+				finished = true;
 				buffer += decoder.decode();
 				if (buffer.trim().length > 0) {
 					yield* parseSseEvents(buffer);
@@ -213,6 +215,13 @@ async function* iterateSseChunks(body: ReadableStream<Uint8Array>): AsyncIterabl
 			}
 		}
 	} finally {
+		if (!finished) {
+			// Early exit before `done`: cancel so workerd doesn't keep the
+			// underlying AI request streaming with no consumer.
+			try {
+				await reader.cancel();
+			} catch {}
+		}
 		try {
 			reader.releaseLock();
 		} catch {}
@@ -276,6 +285,7 @@ const streamCloudflareWorkersAi: StreamFunction<CloudflareAIBindingApi, SimpleSt
 			timestamp: Date.now(),
 		};
 
+		let response: Response | undefined;
 		try {
 			const ai = resolveBinding(model);
 			const messages = convertMessages(
@@ -322,7 +332,7 @@ const streamCloudflareWorkersAi: StreamFunction<CloudflareAIBindingApi, SimpleSt
 			// `returnRawResponse: true` + `stream: true` in the payload gives us
 			// the raw SSE Response we parse below.
 			const gateway = (model as { gateway?: CloudflareGatewayOptions }).gateway;
-			const response = (await (ai.run as unknown as RunOverload)(model.id, finalPayload, {
+			response = (await (ai.run as unknown as RunOverload)(model.id, finalPayload, {
 				returnRawResponse: true,
 				...(options?.signal ? { signal: options.signal } : {}),
 				...(Object.keys(extraHeaders).length > 0 ? { extraHeaders } : {}),
@@ -549,6 +559,11 @@ const streamCloudflareWorkersAi: StreamFunction<CloudflareAIBindingApi, SimpleSt
 			stream.push({ type: 'done', reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
+			// Cancel an unconsumed body so workerd doesn't keep the underlying AI
+			// request open (and the model generating) with no consumer.
+			if (response?.body && !response.body.locked) {
+				void response.body.cancel().catch(() => {});
+			}
 			// Match openai-completions: strip scratch fields from in-flight blocks
 			// before they're exposed on the error event.
 			for (const block of output.content as StreamingBlock[]) {
