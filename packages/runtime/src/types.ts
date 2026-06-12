@@ -551,7 +551,7 @@ export interface FlueSessions {
  * Pass `options.signal` to merge an external `AbortSignal` (e.g.
  * `AbortSignal.timeout(ms)`) with the handle's.
  */
-export interface CallHandle<T> extends PromiseLike<T> {
+export interface CallHandle<T> extends Promise<T> {
 	/** Fires when the call is aborted, whether via `abort()` or `options.signal`. */
 	readonly signal: AbortSignal;
 	/** Cancel the in-flight call. */

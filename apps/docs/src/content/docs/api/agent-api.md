@@ -544,7 +544,7 @@ Deletes this session's stored conversation state. Rejects with `SessionBusyError
 #### `CallHandle<T>`
 
 ```ts
-interface CallHandle<T> extends PromiseLike<T> {
+interface CallHandle<T> extends Promise<T> {
   readonly signal: AbortSignal;
   abort(reason?: unknown): void;
 }

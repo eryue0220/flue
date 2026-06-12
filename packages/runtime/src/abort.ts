@@ -58,12 +58,19 @@ export function createCallHandle<T>(
 		abort(reason?: unknown) {
 			controller.abort(reason);
 		},
-		// CallHandle is intentionally thenable so callers can `await handle`
-		// directly. Defining `then` is the standard way to do this in
-		// TypeScript without subclassing Promise.
+		// CallHandle implements the full Promise interface by delegating to
+		// the internal promise, so callers can `await handle` or chain
+		// `.then()`/`.catch()`/`.finally()` without subclassing Promise.
 		// biome-ignore lint/suspicious/noThenProperty: intentional thenable
 		then(onFulfilled, onRejected) {
 			return promise.then(onFulfilled, onRejected);
 		},
+		catch(onRejected) {
+			return promise.catch(onRejected);
+		},
+		finally(onFinally) {
+			return promise.finally(onFinally);
+		},
+		[Symbol.toStringTag]: 'Promise',
 	};
 }

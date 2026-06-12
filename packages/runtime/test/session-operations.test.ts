@@ -1017,6 +1017,40 @@ describe('CallHandle', () => {
 		await expect(operation).rejects.toMatchObject({ name: 'AbortError', message: 'external stop' });
 	});
 
+	it('delivers the AbortError through .catch() and runs .finally() when abort() cancels an active operation', async () => {
+		const provider = createProvider([{ id: 'reviewer' }]);
+		let markStarted: () => void = () => {};
+		const started = new Promise<void>((resolve) => {
+			markStarted = resolve;
+		});
+		provider.setResponses([
+			() => {
+				markStarted();
+				return fauxAssistantMessage('A response long enough to remain active during cancellation.');
+			},
+		]);
+		const ctx = createContext(provider);
+		const harness = await ctx.init(
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
+		);
+		const session = await harness.session();
+
+		const operation = session.prompt('Begin a cancellable review.');
+		let finallyRan = false;
+		const caught = operation.catch((error: unknown) => error);
+		const settled = operation
+			.finally(() => {
+				finallyRan = true;
+			})
+			.catch(() => {});
+		await started;
+		operation.abort('stop review');
+
+		await expect(caught).resolves.toMatchObject({ name: 'AbortError', message: 'stop review' });
+		await settled;
+		expect(finallyRan).toBe(true);
+	});
+
 	it('exposes an aborted signal when abort() cancels an active operation', async () => {
 		const provider = createProvider([{ id: 'reviewer' }]);
 		let markStarted: () => void = () => {};
