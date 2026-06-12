@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { builtinModules, createRequire } from 'node:module';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { cloudflare } from '@cloudflare/vite-plugin';
 import { packageUpSync } from 'package-up';
 import { CloudflarePlugin } from './build-plugin-cloudflare.ts';
@@ -435,11 +436,7 @@ function readRuntimeVersion(root: string): string {
 }
 
 function getCLIDir(): string {
-	try {
-		return path.dirname(new URL(import.meta.url).pathname);
-	} catch {
-		return __dirname;
-	}
+	return path.dirname(fileURLToPath(import.meta.url));
 }
 
 /**
