@@ -707,6 +707,152 @@ describe('dispatched session processing', () => {
 		await expect(createAgentSubmissionSessionHandler(agent, createDispatchAgentSubmissionInput(input), (s) => s.inspectSubmissionInput(createDispatchAgentSubmissionInput(input)))(ctx)).resolves.toBe('uncertain');
 		expect(provider.state.callCount).toBe(0);
 	});
+
+	it('fails without replaying when persisted transient-retry errors already exhausted the retry budget', async () => {
+		const provider = createProvider();
+		const store = new InMemorySessionStore();
+		const input: DispatchInput = {
+			dispatchId: 'dispatch:retry-exhausted',
+			agent: 'moderator',
+			id: 'guild:retry-exhausted',
+			input: { type: 'flagged', reportId: 'report:retry-exhausted' },
+			acceptedAt: '2026-06-01T00:00:00.000Z',
+		};
+		const timestamp = '2026-06-01T00:00:00.000Z';
+		// One more consecutive retryable error than MAX_TRANSIENT_MODEL_RETRIES
+		// (3): the durable retry budget is exhausted before processing resumes.
+		const retryableError = () =>
+			fauxAssistantMessage('', { stopReason: 'error', errorMessage: '429 Too Many Requests' });
+		await store.save(`agent-session:${JSON.stringify([input.id, 'default', 'default'])}`, {
+			version: 6,
+			affinityKey: 'aff_01KT3P3GZGFBCKHKMQ11A7H2HW',
+			taskSessions: [],
+			entries: [
+				{
+					type: 'message',
+					id: 'dispatch-input',
+					parentId: null,
+					timestamp,
+					message: { role: 'user', content: [{ type: 'text', text: 'persisted dispatch' }], timestamp: 0 },
+					dispatch: { dispatchId: input.dispatchId },
+				},
+				{ type: 'message', id: 'error-1', parentId: 'dispatch-input', timestamp, message: retryableError() },
+				{ type: 'message', id: 'error-2', parentId: 'error-1', timestamp, message: retryableError() },
+				{ type: 'message', id: 'error-3', parentId: 'error-2', timestamp, message: retryableError() },
+				{ type: 'message', id: 'error-4', parentId: 'error-3', timestamp, message: retryableError() },
+			],
+			leafId: 'error-4',
+			metadata: {},
+			createdAt: timestamp,
+			updatedAt: timestamp,
+		});
+		const agent = createAgent(() => ({
+			model: `${provider.getModel().provider}/${provider.getModel().id}`,
+		}));
+		const ctx = createFlueContext({
+			id: input.id,
+			dispatchId: input.dispatchId,
+			payload: input,
+			env: {},
+			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
+			agentConfig: testAgentConfig(),
+			createDefaultEnv: async () => createNoopSessionEnv({ cwd: '/' }),
+			defaultStore: store,
+		});
+
+		const submissionInput = createDispatchAgentSubmissionInput(input);
+		await expect(
+			createAgentSubmissionSessionHandler(agent, submissionInput, (s) =>
+				s.processSubmissionInput(submissionInput),
+			)(ctx),
+		).rejects.toBeInstanceOf(OperationFailedError);
+		expect(provider.state.callCount).toBe(0);
+	});
+
+	it('compacts and continues when processing resumes a persisted context-overflow response', async () => {
+		const provider = createProvider();
+		provider.setResponses([
+			fauxAssistantMessage('summary checkpoint'),
+			fauxAssistantMessage('recovered response'),
+		]);
+		const store = new InMemorySessionStore();
+		const input: DispatchInput = {
+			dispatchId: 'dispatch:overflow-resume',
+			agent: 'moderator',
+			id: 'guild:overflow-resume',
+			input: { type: 'flagged', reportId: 'report:overflow-resume' },
+			acceptedAt: '2026-06-01T00:00:00.000Z',
+		};
+		const timestamp = '2026-06-01T00:00:00.000Z';
+		await store.save(`agent-session:${JSON.stringify([input.id, 'default', 'default'])}`, {
+			version: 6,
+			affinityKey: 'aff_01KT3P3GZGFBCKHKMQ11A7H2HW',
+			taskSessions: [],
+			entries: [
+				{
+					type: 'message',
+					id: 'earlier-user',
+					parentId: null,
+					timestamp,
+					message: { role: 'user', content: [{ type: 'text', text: 'earlier question' }], timestamp: 0 },
+				},
+				{
+					type: 'message',
+					id: 'earlier-assistant',
+					parentId: 'earlier-user',
+					timestamp,
+					message: fauxAssistantMessage('earlier answer'),
+				},
+				{
+					type: 'message',
+					id: 'dispatch-input',
+					parentId: 'earlier-assistant',
+					timestamp,
+					message: { role: 'user', content: [{ type: 'text', text: 'persisted dispatch' }], timestamp: 0 },
+					dispatch: { dispatchId: input.dispatchId },
+				},
+				{
+					type: 'message',
+					id: 'overflow-error',
+					parentId: 'dispatch-input',
+					timestamp,
+					message: fauxAssistantMessage('', {
+						stopReason: 'error',
+						errorMessage: 'Your input exceeds the context window of this model',
+					}),
+				},
+			],
+			leafId: 'overflow-error',
+			metadata: {},
+			createdAt: timestamp,
+			updatedAt: timestamp,
+		});
+		const agent = createAgent(() => ({
+			model: `${provider.getModel().provider}/${provider.getModel().id}`,
+			compaction: { keepRecentTokens: 3 },
+		}));
+		const ctx = createFlueContext({
+			id: input.id,
+			dispatchId: input.dispatchId,
+			payload: input,
+			env: {},
+			req: new Request('http://flue.local/_dispatch', { method: 'POST' }),
+			agentConfig: { subagents: {}, resolveModel: () => provider.getModel() },
+			createDefaultEnv: async () => createNoopSessionEnv({ cwd: '/' }),
+			defaultStore: store,
+		});
+
+		const submissionInput = createDispatchAgentSubmissionInput(input);
+		const result = await createAgentSubmissionSessionHandler(agent, submissionInput, (s) =>
+			s.processSubmissionInput(submissionInput),
+		)(ctx);
+
+		// One summarization call plus one continued turn: the persisted overflow
+		// response resumes through compaction rather than failing or replaying
+		// the input.
+		expect(result).toMatchObject({ text: 'recovered response' });
+		expect(provider.state.callCount).toBe(2);
+	});
 });
 
 describe('repairInterruptedToolCalls()', () => {
