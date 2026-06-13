@@ -205,6 +205,44 @@ importers:
         specifier: ^4.97.0
         version: 4.97.0(@cloudflare/workers-types@4.20260602.1)
 
+  examples/discord-channel:
+    dependencies:
+      '@flue/discord':
+        specifier: workspace:*
+        version: link:../../packages/discord
+      '@flue/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      hono:
+        specifier: 4.12.22
+        version: 4.12.22
+    devDependencies:
+      '@flue/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  examples/github-channel:
+    dependencies:
+      '@flue/github':
+        specifier: workspace:*
+        version: link:../../packages/github
+      '@flue/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      hono:
+        specifier: 4.12.22
+        version: 4.12.22
+    devDependencies:
+      '@flue/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   examples/hello-world:
     dependencies:
       '@daytona/sdk':
@@ -311,6 +349,25 @@ importers:
         specifier: workspace:*
         version: link:../../packages/cli
 
+  examples/slack-channel:
+    dependencies:
+      '@flue/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      '@flue/slack':
+        specifier: workspace:*
+        version: link:../../packages/slack
+      hono:
+        specifier: 4.12.22
+        version: 4.12.22
+    devDependencies:
+      '@flue/cli':
+        specifier: workspace:*
+        version: link:../../packages/cli
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
   packages/cli:
     dependencies:
       '@cloudflare/vite-plugin':
@@ -351,7 +408,35 @@ importers:
         specifier: ^4.1.6
         version: 4.1.7(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(happy-dom@18.0.1)(vite@8.0.14(@types/node@24.13.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
-  packages/connectors: {}
+  packages/discord:
+    devDependencies:
+      '@flue/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      tsdown:
+        specifier: ^0.22.0
+        version: 0.22.0(oxc-resolver@11.19.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0))(tsx@4.22.3)(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.6
+        version: 4.1.7(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(happy-dom@18.0.1)(vite@8.0.14(@types/node@24.13.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+
+  packages/github:
+    devDependencies:
+      '@flue/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      tsdown:
+        specifier: ^0.22.0
+        version: 0.22.0(oxc-resolver@11.19.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0))(tsx@4.22.3)(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.6
+        version: 4.1.7(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(happy-dom@18.0.1)(vite@8.0.14(@types/node@24.13.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/opentelemetry:
     devDependencies:
@@ -498,6 +583,21 @@ importers:
       '@durable-streams/client':
         specifier: ^0.2.6
         version: 0.2.6
+    devDependencies:
+      '@flue/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      tsdown:
+        specifier: ^0.22.0
+        version: 0.22.0(oxc-resolver@11.19.1(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0))(tsx@4.22.3)(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.6
+        version: 4.1.7(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(happy-dom@18.0.1)(vite@8.0.14(@types/node@24.13.1)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)(yaml@2.9.0))
+
+  packages/slack:
     devDependencies:
       '@flue/runtime':
         specifier: workspace:*

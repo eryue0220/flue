@@ -29,7 +29,6 @@ export function registerChatHandlers(agent: CreatedAgent): void {
 	bot.onNewMention(async (thread, message) => {
 		await dispatch(agent, {
 			id: thread.id,
-			session: thread.id,
 			input: {
 				type: 'chat.github.mention',
 				threadId: thread.id,
