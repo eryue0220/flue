@@ -1,8 +1,27 @@
 import { defineTool, type ToolDefinition } from '@flue/runtime';
+import { createGitHubClient } from './client.ts';
+import {
+	DuplicateGitHubHandlerError,
+	InvalidGitHubConversationKeyError,
+	InvalidGitHubInputError,
+} from './errors.ts';
+import { createGitHubWebhookHandler } from './webhook.ts';
+
+export type { GitHubRateLimit } from './errors.ts';
+export {
+	DuplicateGitHubHandlerError,
+	GitHubApiError,
+	GitHubRateLimitError,
+	GitHubTimeoutError,
+	InvalidGitHubConversationKeyError,
+	InvalidGitHubInputError,
+} from './errors.ts';
 
 export interface GitHubChannelOptions {
 	webhookSecret: string;
 	token: string;
+	fetch?: typeof globalThis.fetch;
+	requestTimeoutMs?: number;
 }
 
 export interface GitHubIssueRef {
@@ -12,6 +31,7 @@ export interface GitHubIssueRef {
 }
 
 export interface GitHubRepositoryRef {
+	id: number;
 	owner: string;
 	name: string;
 }
@@ -29,9 +49,14 @@ export interface GitHubPullRequestOpenedPayload {
 	pullRequest: { number: number; title: string; body: string | null };
 }
 
-export interface GitHubWebhookEvent<TPayload> {
-	type: string;
+export interface GitHubWebhookEvent<TType extends string, TPayload> {
+	type: TType;
 	deliveryId: string;
+	hookId?: string;
+	installationTarget?: {
+		id: string;
+		type: string;
+	};
 	installationId?: number;
 	repository: GitHubRepositoryRef;
 	payload: TPayload;
@@ -39,9 +64,15 @@ export interface GitHubWebhookEvent<TPayload> {
 }
 
 export interface GitHubEvents {
-	'issues.opened': GitHubWebhookEvent<GitHubIssuesOpenedPayload>;
-	'issue_comment.created': GitHubWebhookEvent<GitHubIssueCommentCreatedPayload>;
-	'pull_request.opened': GitHubWebhookEvent<GitHubPullRequestOpenedPayload>;
+	'issues.opened': GitHubWebhookEvent<'issues.opened', GitHubIssuesOpenedPayload>;
+	'issue_comment.created': GitHubWebhookEvent<
+		'issue_comment.created',
+		GitHubIssueCommentCreatedPayload
+	>;
+	'pull_request.opened': GitHubWebhookEvent<
+		'pull_request.opened',
+		GitHubPullRequestOpenedPayload
+	>;
 }
 
 export type GitHubEventName = keyof GitHubEvents;
@@ -55,13 +86,6 @@ export interface GitHubWebhookRouteOptions {
 export interface GitHubClient {
 	commentOnIssue(ref: GitHubIssueRef, text: string, signal?: AbortSignal): Promise<void>;
 	addLabels(ref: GitHubIssueRef, labels: string[], signal?: AbortSignal): Promise<void>;
-}
-
-export class InvalidGitHubConversationKeyError extends Error {
-	constructor() {
-		super('Invalid GitHub conversation key.');
-		this.name = 'InvalidGitHubConversationKeyError';
-	}
 }
 
 export interface GitHubChannel {
@@ -83,60 +107,89 @@ export interface GitHubChannel {
 
 export function createGitHubChannel(options: GitHubChannelOptions): GitHubChannel {
 	validateOptions(options);
-	const handlers = new Map<GitHubEventName, Map<symbol, GitHubNotificationHandler<GitHubEvents[GitHubEventName]>>>();
-	const client: GitHubClient = {
-		async commentOnIssue() {
-			throw new Error('@flue/github client is not implemented yet.');
-		},
-		async addLabels() {
-			throw new Error('@flue/github client is not implemented yet.');
-		},
+	const webhookSecret = options.webhookSecret;
+	const clientOptions = {
+		webhookSecret,
+		token: options.token,
+		fetch: options.fetch,
+		requestTimeoutMs: options.requestTimeoutMs,
 	};
+	const handlers = new Map<
+		GitHubEventName,
+		GitHubNotificationHandler<GitHubEvents[GitHubEventName]>
+	>();
+	const client = createGitHubClient(clientOptions);
 
-	return {
+	const channel: GitHubChannel = {
 		routes: {
-			webhook: (_routeOptions) => async () =>
-				new Response('@flue/github webhook route is not implemented yet.', { status: 501 }),
+				webhook: (routeOptions) =>
+					createGitHubWebhookHandler({
+						webhookSecret,
+					bodyLimit: routeOptions?.bodyLimit,
+					getHandler: (type) => handlers.get(type),
+				}),
 		},
 		client,
 		tools: {
-			commentOnIssue: (ref) =>
-				defineTool({
+			commentOnIssue: (ref) => {
+				assertIssueRef(ref);
+				const boundRef = snapshotIssueRef(ref);
+				return defineTool({
 					name: 'github_comment_on_issue',
 					description: 'Post a comment to the bound GitHub issue or pull request.',
 					parameters: {
 						type: 'object',
-						properties: { text: { type: 'string' } },
+						properties: { text: { type: 'string', minLength: 1 } },
 						required: ['text'],
 						additionalProperties: false,
 					},
 					execute: async ({ text }, signal) => {
-						await client.commentOnIssue(ref, String(text), signal);
+						await client.commentOnIssue(boundRef, text, signal);
 						return 'Comment posted.';
 					},
-				}),
-			addLabels: (ref) =>
-				defineTool({
+				});
+			},
+			addLabels: (ref) => {
+				assertIssueRef(ref);
+				const boundRef = snapshotIssueRef(ref);
+				return defineTool({
 					name: 'github_add_labels',
 					description: 'Add labels to the bound GitHub issue or pull request.',
 					parameters: {
 						type: 'object',
-						properties: { labels: { type: 'array', items: { type: 'string' } } },
+						properties: {
+							labels: {
+								type: 'array',
+								items: { type: 'string', minLength: 1 },
+								minItems: 1,
+							},
+						},
 						required: ['labels'],
 						additionalProperties: false,
 					},
 					execute: async ({ labels }, signal) => {
-						await client.addLabels(ref, labels as string[], signal);
+						await client.addLabels(boundRef, labels, signal);
 						return 'Labels added.';
 					},
-				}),
+				});
+			},
 		},
 		on(type, handler) {
-			const registrations = handlers.get(type) ?? new Map();
-			const registration = Symbol(type);
-			registrations.set(registration, handler as GitHubNotificationHandler<GitHubEvents[GitHubEventName]>);
-			handlers.set(type, registrations);
-			return () => registrations.delete(registration);
+			if (typeof handler !== 'function') {
+				throw new TypeError(`GitHub handler for "${type}" must be a function.`);
+			}
+			if (handlers.has(type)) {
+				throw new DuplicateGitHubHandlerError(type);
+			}
+			const registeredHandler =
+				handler as GitHubNotificationHandler<GitHubEvents[GitHubEventName]>;
+			handlers.set(type, registeredHandler);
+			let active = true;
+			return () => {
+				if (!active) return;
+				active = false;
+				if (handlers.get(type) === registeredHandler) handlers.delete(type);
+			};
 		},
 		conversationKey(ref) {
 			assertIssueRef(ref);
@@ -155,7 +208,7 @@ export function createGitHubChannel(options: GitHubChannelOptions): GitHubChanne
 					issueNumber: Number(issueNumberText),
 				};
 				assertIssueRef(ref);
-				if (this.conversationKey(ref) !== id) throw new InvalidGitHubConversationKeyError();
+				if (channel.conversationKey(ref) !== id) throw new InvalidGitHubConversationKeyError();
 				return ref;
 			} catch (error) {
 				if (error instanceof InvalidGitHubConversationKeyError) throw error;
@@ -163,14 +216,50 @@ export function createGitHubChannel(options: GitHubChannelOptions): GitHubChanne
 			}
 		},
 	};
+
+	return channel;
 }
 
 function validateOptions(options: GitHubChannelOptions): void {
-	if (!options.webhookSecret || !options.token) throw new Error('@flue/github requires webhookSecret and token.');
+	if (!options || typeof options !== 'object') {
+		throw new TypeError('createGitHubChannel() requires an options object.');
+	}
+	if (typeof options.webhookSecret !== 'string' || options.webhookSecret.length === 0) {
+		throw new TypeError('createGitHubChannel() requires a non-empty webhookSecret.');
+	}
+	if (typeof options.token !== 'string' || options.token.length === 0) {
+		throw new TypeError('createGitHubChannel() requires a non-empty token.');
+	}
+	if (options.fetch !== undefined && typeof options.fetch !== 'function') {
+		throw new TypeError('createGitHubChannel() fetch must be a function.');
+	}
+	if (
+		options.requestTimeoutMs !== undefined &&
+		(!Number.isSafeInteger(options.requestTimeoutMs) || options.requestTimeoutMs <= 0)
+	) {
+		throw new TypeError('createGitHubChannel() requestTimeoutMs must be a positive integer.');
+	}
 }
 
 function assertIssueRef(ref: GitHubIssueRef): void {
-	if (!ref.owner || !ref.repo || !Number.isSafeInteger(ref.issueNumber) || ref.issueNumber <= 0) {
-		throw new InvalidGitHubConversationKeyError();
+	if (!ref || typeof ref !== 'object') throw new InvalidGitHubInputError('ref');
+	assertPathSegment(ref.owner, 'owner');
+	assertPathSegment(ref.repo, 'repo');
+	if (!Number.isSafeInteger(ref.issueNumber) || ref.issueNumber <= 0) {
+		throw new InvalidGitHubInputError('issueNumber');
 	}
+}
+
+function assertPathSegment(value: unknown, field: string): asserts value is string {
+	if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
+		throw new InvalidGitHubInputError(field);
+	}
+}
+
+function snapshotIssueRef(ref: GitHubIssueRef): GitHubIssueRef {
+	return {
+		owner: ref.owner,
+		repo: ref.repo,
+		issueNumber: ref.issueNumber,
+	};
 }

@@ -18,7 +18,29 @@ github.on('issues.opened', async (event) => {
 		input: {
 			type: 'github.issues.opened',
 			deliveryId: event.deliveryId,
+			installationId: event.installationId,
 			issue,
+			title: event.payload.issue.title,
+			body: event.payload.issue.body,
+		},
+	});
+});
+
+github.on('pull_request.opened', async (event) => {
+	const pullRequest = {
+		owner: event.repository.owner,
+		repo: event.repository.name,
+		issueNumber: event.payload.pullRequest.number,
+	};
+	await dispatch(assistant, {
+		id: github.conversationKey(pullRequest),
+		input: {
+			type: 'github.pull_request.opened',
+			deliveryId: event.deliveryId,
+			installationId: event.installationId,
+			pullRequest,
+			title: event.payload.pullRequest.title,
+			body: event.payload.pullRequest.body,
 		},
 	});
 });
