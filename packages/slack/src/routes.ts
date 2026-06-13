@@ -2,12 +2,18 @@ import type { Context, Env, Handler } from 'hono';
 import type {
 	JsonValue,
 	SlackActionEnvelope,
+	SlackBlockSuggestionEnvelope,
 	SlackEvent,
 	SlackEvents,
 	SlackHandlerResult,
 	SlackInteraction,
+	SlackInteractionCapabilities,
+	SlackMessageShortcutEnvelope,
+	SlackShortcutEnvelope,
+	SlackSlashCommand,
 	SlackUnknownEvent,
 	SlackUnknownInteraction,
+	SlackViewClosedEnvelope,
 	SlackViewSubmissionEnvelope,
 } from './index.ts';
 
@@ -32,6 +38,10 @@ interface SlackInteractionsHandlerOptions<E extends Env> extends SharedRouteOpti
 	interactions(input: { c: Context<E>; interaction: SlackInteraction }): SlackHandlerResult;
 }
 
+interface SlackCommandsHandlerOptions<E extends Env> extends SharedRouteOptions {
+	commands(input: { c: Context<E>; command: SlackSlashCommand }): SlackHandlerResult;
+}
+
 export function createSlackEventsHandler<E extends Env>(
 	options: SlackEventsHandlerOptions<E>,
 ): Handler<E> {
@@ -47,10 +57,7 @@ export function createSlackEventsHandler<E extends Env>(
 		const envelopeType = readString(raw, 'type');
 		if (envelopeType === 'url_verification') {
 			const challenge = readString(raw, 'challenge');
-			const appId = readString(raw, 'api_app_id');
-			const teamId = readString(raw, 'team_id');
-			if (challenge === undefined || !appId || !teamId) return response(400);
-			if (appId !== options.appId || teamId !== options.teamId) return response(403);
+			if (challenge === undefined) return response(400);
 			return Response.json({ challenge }, { status: 200 });
 		}
 		if (envelopeType !== 'event_callback') {
@@ -58,6 +65,7 @@ export function createSlackEventsHandler<E extends Env>(
 			const teamId = readString(raw, 'team_id');
 			if (!appId || !teamId) return response(400);
 			if (appId !== options.appId || teamId !== options.teamId) return response(403);
+			if (isEnterpriseInstall(raw)) return response(403);
 			const eventId = readOptionalString(raw, 'event_id');
 			return invokeEvent(
 				options.events,
@@ -81,6 +89,7 @@ export function createSlackEventsHandler<E extends Env>(
 		const event = readRecord(raw, 'event');
 		if (!appId || !teamId || !eventId || !event) return response(400);
 		if (appId !== options.appId || teamId !== options.teamId) return response(403);
+		if (isEnterpriseInstall(raw)) return response(403);
 
 		const eventType = readString(event, 'type');
 		if (
@@ -119,32 +128,110 @@ export function createSlackInteractionsHandler<E extends Env>(
 		const raw = parseFormPayload(verified.body);
 		if (!isRecord(raw)) return response(400);
 
-		const appId = readString(raw, 'api_app_id');
+		const payloadAppId = readOptionalString(raw, 'api_app_id');
 		const team = readRecord(raw, 'team');
 		const teamId = team && readString(team, 'id');
+		const enterprise = readRecord(raw, 'enterprise');
+		const enterpriseId = enterprise && readOptionalString(enterprise, 'id');
 		const user = readRecord(raw, 'user');
 		const userId = user && readString(user, 'id');
-		if (!appId || !teamId || !userId) return response(403);
-		if (appId !== options.appId || teamId !== options.teamId) return response(403);
+		if (!teamId || !userId) return response(403);
+		if (payloadAppId !== undefined && payloadAppId !== options.appId) return response(403);
+		if (teamId !== options.teamId || isEnterpriseInstall(raw)) return response(403);
+		const common = {
+			appId: options.appId,
+			teamId,
+			...(enterpriseId === undefined ? {} : { enterpriseId }),
+			userId,
+		};
 
 		const type = readString(raw, 'type');
 		let interaction: SlackInteraction | undefined;
 		if (type === 'block_actions') {
-			interaction = normalizeAction(raw, appId, teamId, userId);
+			interaction = normalizeAction(raw, common);
 		} else if (type === 'view_submission') {
-			interaction = normalizeView(raw, appId, teamId, userId);
+			interaction = normalizeView(raw, common);
+		} else if (type === 'view_closed') {
+			interaction = normalizeViewClosed(raw, common);
+		} else if (type === 'shortcut') {
+			interaction = normalizeShortcut(raw, common);
+		} else if (type === 'message_action') {
+			interaction = normalizeMessageShortcut(raw, common);
+		} else if (type === 'block_suggestion') {
+			interaction = normalizeBlockSuggestion(raw, common);
 		} else {
+			const capabilities = readInteractionCapabilities(raw);
 			interaction = {
 				type: 'unknown',
 				interactionType: type ?? 'unknown',
-				appId,
-				teamId,
-				userId,
+				...common,
+				...(capabilities === undefined ? {} : { capabilities }),
 				raw,
 			} satisfies SlackUnknownInteraction;
 		}
 		if (!interaction) return response(400);
 		return invokeInteraction(options.interactions, c, interaction, route.handlerTimeoutMs);
+	};
+}
+
+export function createSlackCommandsHandler<E extends Env>(
+	options: SlackCommandsHandlerOptions<E>,
+): Handler<E> {
+	const route = prepareRoute(options);
+
+	return async (c) => {
+		const request = c.req.raw;
+		const verified = await route.verify(request, 'application/x-www-form-urlencoded');
+		if (verified instanceof Response) return verified;
+		const form = parseForm(verified.body);
+		if (!form) return response(400);
+
+		const appId = readRequiredFormValue(form, 'api_app_id');
+		const teamId = readRequiredFormValue(form, 'team_id');
+		const channelId = readRequiredFormValue(form, 'channel_id');
+		const userId = readRequiredFormValue(form, 'user_id');
+		const commandName = readRequiredFormValue(form, 'command');
+		const text = readRequiredFormValue(form, 'text', true);
+		const triggerId = readRequiredFormValue(form, 'trigger_id');
+		const responseUrl = readRequiredFormValue(form, 'response_url');
+		const enterpriseInstall = readOptionalFormBoolean(form, 'is_enterprise_install');
+		if (
+			!appId ||
+			!teamId ||
+			!channelId ||
+			!userId ||
+			!commandName ||
+			text === undefined ||
+			!triggerId ||
+			!responseUrl ||
+			enterpriseInstall === null
+		) {
+			return response(400);
+		}
+		if (appId !== options.appId || teamId !== options.teamId || enterpriseInstall === true) {
+			return response(403);
+		}
+
+		const enterpriseId = readOptionalFormValue(form, 'enterprise_id');
+		const channelName = readOptionalFormValue(form, 'channel_name');
+		const userName = readOptionalFormValue(form, 'user_name');
+		const command: SlackSlashCommand = {
+			type: 'slash_command',
+			appId,
+			teamId,
+			...(enterpriseId === undefined ? {} : { enterpriseId }),
+			channelId,
+			...(channelName === undefined ? {} : { channelName }),
+			userId,
+			...(userName === undefined ? {} : { userName }),
+			command: commandName,
+			text,
+			capabilities: { triggerId, responseUrl },
+			raw: formToRecord(form),
+		};
+		const outcome = await runHandler(() => options.commands({ c, command }), route.handlerTimeoutMs);
+		if (outcome.type !== 'success') return response(500);
+		return serializeHandlerResult(outcome.value);
 	};
 }
 
@@ -256,11 +343,16 @@ function normalizeEvent(
 	};
 }
 
+interface SlackInteractionIdentity {
+	appId: string;
+	teamId: string;
+	enterpriseId?: string;
+	userId: string;
+}
+
 function normalizeAction(
 	raw: Record<string, unknown>,
-	appId: string,
-	teamId: string,
-	userId: string,
+	identity: SlackInteractionIdentity,
 ): SlackActionEnvelope | undefined {
 	const actions = raw.actions;
 	if (!Array.isArray(actions) || actions.length !== 1 || !isRecord(actions[0])) return undefined;
@@ -268,10 +360,12 @@ function normalizeAction(
 	const actionId = readString(action, 'action_id');
 	if (!actionId) return undefined;
 	const value = readOptionalString(action, 'value');
+	const blockId = readOptionalString(action, 'block_id');
 	const channel = readRecord(raw, 'channel');
 	const message = readRecord(raw, 'message');
 	const container = readRecord(raw, 'container');
-	if (!container || readString(container, 'type') !== 'message') return undefined;
+	const containerType = container && readString(container, 'type');
+	if (!container || !containerType) return undefined;
 	const channelId =
 		(channel && readOptionalString(channel, 'id')) ?? readOptionalString(container, 'channel_id');
 	const messageTs =
@@ -280,17 +374,24 @@ function normalizeAction(
 		(message && readOptionalString(message, 'thread_ts')) ??
 		readOptionalString(container, 'thread_ts') ??
 		messageTs;
-	if (!channelId || !messageTs || !threadTs) return undefined;
+	const viewId = readOptionalString(container, 'view_id');
+	const capabilities = readInteractionCapabilities(raw);
 	return {
 		type: 'action',
-		appId,
-		teamId,
-		userId,
+		...identity,
 		actionId,
 		...(value === undefined ? {} : { value }),
-		channelId,
-		messageTs,
-		threadTs,
+		...(blockId === undefined ? {} : { blockId }),
+		container: {
+			type: containerType,
+			...(channelId === undefined ? {} : { channelId }),
+			...(messageTs === undefined ? {} : { messageTs }),
+			...(viewId === undefined ? {} : { viewId }),
+		},
+		...(channelId === undefined ? {} : { channelId }),
+		...(messageTs === undefined ? {} : { messageTs }),
+		...(threadTs === undefined ? {} : { threadTs }),
+		...(capabilities === undefined ? {} : { capabilities }),
 		payload: action,
 		raw,
 	};
@@ -298,26 +399,161 @@ function normalizeAction(
 
 function normalizeView(
 	raw: Record<string, unknown>,
-	appId: string,
-	teamId: string,
-	userId: string,
+	identity: SlackInteractionIdentity,
 ): SlackViewSubmissionEnvelope | undefined {
 	const view = readRecord(raw, 'view');
 	const viewId = view && readString(view, 'id');
 	const callbackId = view && readString(view, 'callback_id');
 	const state = view && readRecord(view, 'state');
 	if (!viewId || !callbackId || !state || !Object.hasOwn(state, 'values')) return undefined;
+	const capabilities = readInteractionCapabilities(raw);
 	return {
 		type: 'view_submission',
-		appId,
-		teamId,
-		userId,
+		...identity,
 		viewId,
 		callbackId,
 		privateMetadata: readOptionalString(view, 'private_metadata'),
 		values: state.values,
+		...(capabilities === undefined ? {} : { capabilities }),
 		raw,
 	};
+}
+
+function normalizeViewClosed(
+	raw: Record<string, unknown>,
+	identity: SlackInteractionIdentity,
+): SlackViewClosedEnvelope | undefined {
+	const view = readRecord(raw, 'view');
+	const viewId = view && readString(view, 'id');
+	const isCleared = raw.is_cleared;
+	if (!viewId || typeof isCleared !== 'boolean') return undefined;
+	const callbackId = readOptionalString(view, 'callback_id');
+	const privateMetadata = readOptionalString(view, 'private_metadata');
+	return {
+		type: 'view_closed',
+		...identity,
+		viewId,
+		...(callbackId === undefined ? {} : { callbackId }),
+		...(privateMetadata === undefined ? {} : { privateMetadata }),
+		isCleared,
+		raw,
+	};
+}
+
+function normalizeShortcut(
+	raw: Record<string, unknown>,
+	identity: SlackInteractionIdentity,
+): SlackShortcutEnvelope | undefined {
+	const callbackId = readString(raw, 'callback_id');
+	const triggerId = readString(raw, 'trigger_id');
+	if (!callbackId || !triggerId) return undefined;
+	return {
+		type: 'shortcut',
+		...identity,
+		callbackId,
+		capabilities: {
+			...readInteractionCapabilities(raw),
+			triggerId,
+		},
+		raw,
+	};
+}
+
+function normalizeMessageShortcut(
+	raw: Record<string, unknown>,
+	identity: SlackInteractionIdentity,
+): SlackMessageShortcutEnvelope | undefined {
+	const callbackId = readString(raw, 'callback_id');
+	const triggerId = readString(raw, 'trigger_id');
+	const responseUrl = readString(raw, 'response_url');
+	const channel = readRecord(raw, 'channel');
+	const channelId = channel && readString(channel, 'id');
+	const message = readRecord(raw, 'message');
+	const messageTs = message && readString(message, 'ts');
+	if (!callbackId || !triggerId || !responseUrl || !channelId || !message || !messageTs) {
+		return undefined;
+	}
+	return {
+		type: 'message_action',
+		...identity,
+		callbackId,
+		channelId,
+		messageTs,
+		message,
+		capabilities: {
+			...readInteractionCapabilities(raw),
+			triggerId,
+			responseUrl,
+		},
+		raw,
+	};
+}
+
+function normalizeBlockSuggestion(
+	raw: Record<string, unknown>,
+	identity: SlackInteractionIdentity,
+): SlackBlockSuggestionEnvelope | undefined {
+	const actionId = readString(raw, 'action_id');
+	const blockId = readString(raw, 'block_id');
+	const value = readString(raw, 'value');
+	if (!actionId || !blockId || value === undefined) return undefined;
+	const channel = readRecord(raw, 'channel');
+	const channelId = channel && readOptionalString(channel, 'id');
+	const view = readRecord(raw, 'view');
+	const viewId = view && readOptionalString(view, 'id');
+	return {
+		type: 'block_suggestion',
+		...identity,
+		actionId,
+		blockId,
+		value,
+		...(channelId === undefined ? {} : { channelId }),
+		...(viewId === undefined ? {} : { viewId }),
+		raw,
+	};
+}
+
+function readInteractionCapabilities(
+	raw: Record<string, unknown>,
+): SlackInteractionCapabilities | undefined {
+	const triggerId = readOptionalString(raw, 'trigger_id');
+	const responseUrl = readOptionalString(raw, 'response_url');
+	const view = readRecord(raw, 'view');
+	const responseUrls = view && readResponseUrls(view.response_urls);
+	if (triggerId === undefined && responseUrl === undefined && responseUrls === undefined) {
+		return undefined;
+	}
+	return {
+		...(triggerId === undefined ? {} : { triggerId }),
+		...(responseUrl === undefined ? {} : { responseUrl }),
+		...(responseUrls === undefined ? {} : { responseUrls }),
+	};
+}
+
+function readResponseUrls(
+	value: unknown,
+): SlackInteractionCapabilities['responseUrls'] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const responseUrls: NonNullable<SlackInteractionCapabilities['responseUrls']>[number][] = [];
+	for (const item of value) {
+		if (!isRecord(item)) continue;
+		const blockId = readString(item, 'block_id');
+		const actionId = readString(item, 'action_id');
+		const channelId = readString(item, 'channel_id');
+		const responseUrl = readString(item, 'response_url');
+		if (blockId && actionId && channelId && responseUrl) {
+			responseUrls.push({ blockId, actionId, channelId, responseUrl });
+		}
+	}
+	return responseUrls.length > 0 ? responseUrls : undefined;
+}
+
+function isEnterpriseInstall(raw: Record<string, unknown>): boolean {
+	if (raw.is_enterprise_install === true) return true;
+	if (!Array.isArray(raw.authorizations)) return false;
+	return raw.authorizations.some(
+		(authorization) => isRecord(authorization) && authorization.is_enterprise_install === true,
+	);
 }
 
 type HandlerOutcome<T> = { type: 'success'; value: T } | { type: 'failure' } | { type: 'timeout' };
@@ -443,14 +679,63 @@ function parseJson(body: Uint8Array): unknown {
 
 function parseFormPayload(body: Uint8Array): unknown {
 	try {
-		const text = new TextDecoder('utf-8', { fatal: true }).decode(body);
-		const form = new URLSearchParams(text);
+		const form = parseForm(body);
+		if (!form) return undefined;
 		const payloads = form.getAll('payload');
 		if (payloads.length !== 1) return undefined;
 		return JSON.parse(payloads[0] ?? '');
 	} catch {
 		return undefined;
 	}
+}
+
+function parseForm(body: Uint8Array): URLSearchParams | undefined {
+	try {
+		const text = new TextDecoder('utf-8', { fatal: true }).decode(body);
+		return new URLSearchParams(text);
+	} catch {
+		return undefined;
+	}
+}
+
+function readRequiredFormValue(
+	form: URLSearchParams,
+	key: string,
+	allowEmpty = false,
+): string | undefined {
+	const values = form.getAll(key);
+	if (values.length !== 1) return undefined;
+	const value = values[0];
+	if (value === undefined || (!allowEmpty && value.length === 0)) return undefined;
+	return value;
+}
+
+function readOptionalFormValue(form: URLSearchParams, key: string): string | undefined {
+	const values = form.getAll(key);
+	if (values.length === 0) return undefined;
+	if (values.length !== 1 || !values[0]) return undefined;
+	return values[0];
+}
+
+function readOptionalFormBoolean(
+	form: URLSearchParams,
+	key: string,
+): boolean | undefined | null {
+	const values = form.getAll(key);
+	if (values.length === 0) return undefined;
+	if (values.length !== 1) return null;
+	if (values[0] === 'true') return true;
+	if (values[0] === 'false') return false;
+	return null;
+}
+
+function formToRecord(form: URLSearchParams): Record<string, string | string[]> {
+	const record: Record<string, string | string[]> = {};
+	for (const key of new Set(form.keys())) {
+		const values = form.getAll(key);
+		record[key] = values.length === 1 && values[0] !== undefined ? values[0] : values;
+	}
+	return record;
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {

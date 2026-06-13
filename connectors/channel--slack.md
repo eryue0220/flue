@@ -15,7 +15,8 @@ application-owned Slack Web API behavior to a Flue project.
 Read local instructions, detect the package manager and target, and select the
 first existing source root: `<root>/.flue/`, then `<root>/src/`, then
 `<root>/`. Inspect existing agents, environment types, secret conventions, and
-whether the application needs Events API, interactivity, or both.
+whether the application needs Events API, interactivity, slash commands, or a
+combination.
 
 Install `@flue/slack` and Slack's official
 `@slack/web-api@^8.0.0-rc.1` SDK with the project's package manager. Version 8
@@ -70,6 +71,12 @@ export const channel = createSlackChannel({
   // async interactions({ interaction }) {
   //   return;
   // },
+
+  // Enable this surface only when the application handles slash commands.
+  // Path: /channels/slack/commands
+  // async commands({ c, command }) {
+  //   return c.json({ response_type: 'ephemeral', text: `Received ${command.command}` });
+  // },
 });
 
 export function replyInThread(ref: { channelId: string; threadTs: string }) {
@@ -94,11 +101,16 @@ export function replyInThread(ref: { channelId: string; threadTs: string }) {
 }
 ```
 
-Omitting `events` or `interactions` omits that route. Leave an unused surface
-commented out rather than publishing an empty handler. If the user does not
-need thread replies, replace or omit the example tool. Keep channel ids,
-`response_url`, credentials, and arbitrary Slack API methods out of tool
-arguments unless explicitly authorized.
+Omitting `events`, `interactions`, or `commands` omits that route. Leave an
+unused surface commented out rather than publishing an empty handler. If the
+user does not need thread replies, replace or omit the example tool. Keep
+channel ids, credentials, and arbitrary Slack API methods out of tool arguments
+unless explicitly authorized.
+
+Interaction and slash-command values under `capabilities` are short-lived
+provider capabilities. Use `triggerId`, `responseUrl`, and view response URLs
+only in immediate trusted application code. Never copy them into dispatch
+input, model context, logs, or durable session data.
 
 For Cloudflare projects, follow existing Worker binding conventions for
 secrets. Keep using the project-owned `WebClient`; do not replace
@@ -124,10 +136,14 @@ read inside deferred callbacks and initializers.
 `SLACK_SIGNING_SECRET` verifies exact request bytes. `SLACK_APP_ID` and
 `SLACK_TEAM_ID` constrain trusted inbound identity. `SLACK_BOT_TOKEN`
 authenticates outbound Web API calls. Follow project secret conventions and
-never invent values.
+never invent values. Slack URL verification supplies only a signed challenge,
+so the package acknowledges it using signature verification rather than
+payload identity fields.
 
 Run the project's typecheck and configured build. Generate local
 `X-Slack-Signature` values from representative Events API and interaction
-payloads. Test the URL verification handshake, timestamp rejection, identity
-mismatch, `/channels/slack/events`, optional route omission, and default empty
-`200`. Do not contact Slack.
+payloads and URL-encoded slash commands. Test the URL verification handshake,
+timestamp rejection, identity mismatch, org-wide-install rejection, all
+configured route paths, optional route omission, and default empty `200`.
+Exercise one `WebClient` call through a fake Fetch transport in workerd. Do not
+contact Slack.

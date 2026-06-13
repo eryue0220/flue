@@ -39,6 +39,12 @@ export const channel = createSlackChannel({
 	// async interactions({ interaction }) {
 	// 	return;
 	// },
+
+	// Enable this surface when the application handles slash commands.
+	// Path: /channels/slack/commands
+	// async commands({ c, command }) {
+	// 	return c.json({ response_type: 'ephemeral', text: `Received ${command.command}` });
+	// },
 });
 
 export function replyInThread(ref: { channelId: string; threadTs: string }) {

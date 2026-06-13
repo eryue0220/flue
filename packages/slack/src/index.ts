@@ -1,6 +1,10 @@
 import type { Context, Env, Handler } from 'hono';
 import { InvalidSlackConversationKeyError, InvalidSlackInputError } from './errors.ts';
-import { createSlackEventsHandler, createSlackInteractionsHandler } from './routes.ts';
+import {
+	createSlackCommandsHandler,
+	createSlackEventsHandler,
+	createSlackInteractionsHandler,
+} from './routes.ts';
 
 export { InvalidSlackConversationKeyError, InvalidSlackInputError } from './errors.ts';
 
@@ -20,8 +24,9 @@ export interface ChannelRoute<E extends Env = Env> {
 
 /** Ingress configuration for one fixed Slack application and workspace. */
 export interface SlackChannelOptions<E extends Env = Env> {
+	/** Secret used to verify exact Slack request bytes. */
 	signingSecret: string;
-	/** Expected signed Slack application id. */
+	/** Expected application id. Normalized payloads always use this value. */
 	appId: string;
 	/** Expected workspace id. Org-wide installations are not supported in v1. */
 	teamId: string;
@@ -33,6 +38,8 @@ export interface SlackChannelOptions<E extends Env = Env> {
 	events?(input: SlackEventsHandlerInput<E>): SlackHandlerResult;
 	/** Optional interactivity callback. Omit it to omit `/interactions`. */
 	interactions?(input: SlackInteractionsHandlerInput<E>): SlackHandlerResult;
+	/** Optional slash-command callback. Omit it to omit `/commands`. */
+	commands?(input: SlackCommandsHandlerInput<E>): SlackHandlerResult;
 }
 
 /** Canonical Slack thread destination within the configured workspace. */
@@ -80,17 +87,47 @@ export interface SlackUnknownEvent {
 	raw: unknown;
 }
 
+/**
+ * Short-lived Slack capabilities for immediate trusted application use.
+ *
+ * Never place these values in model context, dispatch input, logs, or durable
+ * session data.
+ */
+export interface SlackInteractionCapabilities {
+	triggerId?: string;
+	responseUrl?: string;
+	responseUrls?: readonly {
+		blockId: string;
+		actionId: string;
+		channelId: string;
+		responseUrl: string;
+	}[];
+}
+
+/** Provider container that originated a block action. */
+export interface SlackInteractionContainer {
+	type: string;
+	channelId?: string;
+	messageTs?: string;
+	viewId?: string;
+}
+
+/** One verified Block Kit action. Message context is present only when supplied. */
 export interface SlackActionEnvelope {
 	type: 'action';
 	appId: string;
 	teamId: string;
+	enterpriseId?: string;
 	userId: string;
 	actionId: string;
 	/** Signed action value when the provider action supplies one. */
 	value?: string;
-	channelId: string;
-	messageTs: string;
-	threadTs: string;
+	blockId?: string;
+	container: SlackInteractionContainer;
+	channelId?: string;
+	messageTs?: string;
+	threadTs?: string;
+	capabilities?: SlackInteractionCapabilities;
 	/** Provider-native action object. */
 	payload: unknown;
 	/**
@@ -101,15 +138,18 @@ export interface SlackActionEnvelope {
 	raw: unknown;
 }
 
+/** One verified modal submission. */
 export interface SlackViewSubmissionEnvelope {
 	type: 'view_submission';
 	appId: string;
 	teamId: string;
+	enterpriseId?: string;
 	userId: string;
 	viewId: string;
 	callbackId: string;
 	privateMetadata?: string;
 	values: unknown;
+	capabilities?: SlackInteractionCapabilities;
 	/**
 	 * Complete parsed interaction payload. It may contain a signed
 	 * `response_url` capability; keep it out of dispatch input, model context,
@@ -118,12 +158,90 @@ export interface SlackViewSubmissionEnvelope {
 	raw: unknown;
 }
 
+/** One verified modal closure. */
+export interface SlackViewClosedEnvelope {
+	type: 'view_closed';
+	appId: string;
+	teamId: string;
+	enterpriseId?: string;
+	userId: string;
+	viewId: string;
+	callbackId?: string;
+	privateMetadata?: string;
+	isCleared: boolean;
+	raw: unknown;
+}
+
+/** One verified global shortcut invocation. */
+export interface SlackShortcutEnvelope {
+	type: 'shortcut';
+	appId: string;
+	teamId: string;
+	enterpriseId?: string;
+	userId: string;
+	callbackId: string;
+	capabilities: SlackInteractionCapabilities & { triggerId: string };
+	raw: unknown;
+}
+
+/** One verified message shortcut invocation. */
+export interface SlackMessageShortcutEnvelope {
+	type: 'message_action';
+	appId: string;
+	teamId: string;
+	enterpriseId?: string;
+	userId: string;
+	callbackId: string;
+	channelId: string;
+	messageTs: string;
+	message: unknown;
+	capabilities: SlackInteractionCapabilities & { triggerId: string; responseUrl: string };
+	raw: unknown;
+}
+
+/** One verified external-select suggestion request. */
+export interface SlackBlockSuggestionEnvelope {
+	type: 'block_suggestion';
+	appId: string;
+	teamId: string;
+	enterpriseId?: string;
+	userId: string;
+	actionId: string;
+	blockId: string;
+	value: string;
+	channelId?: string;
+	viewId?: string;
+	raw: unknown;
+}
+
+/** Verified but unsupported Slack interaction. */
 export interface SlackUnknownInteraction {
 	type: 'unknown';
 	interactionType: string;
 	appId: string;
 	teamId: string;
+	enterpriseId?: string;
 	userId: string;
+	capabilities?: SlackInteractionCapabilities;
+	raw: unknown;
+}
+
+/** One verified slash-command invocation. */
+export interface SlackSlashCommand {
+	type: 'slash_command';
+	appId: string;
+	teamId: string;
+	enterpriseId?: string;
+	channelId: string;
+	channelName?: string;
+	userId: string;
+	userName?: string;
+	command: string;
+	text: string;
+	capabilities: SlackInteractionCapabilities & {
+		triggerId: string;
+		responseUrl: string;
+	};
 	raw: unknown;
 }
 
@@ -136,6 +254,10 @@ export type SlackEvent = SlackEvents[keyof SlackEvents] | SlackUnknownEvent;
 export type SlackInteraction =
 	| SlackActionEnvelope
 	| SlackViewSubmissionEnvelope
+	| SlackViewClosedEnvelope
+	| SlackShortcutEnvelope
+	| SlackMessageShortcutEnvelope
+	| SlackBlockSuggestionEnvelope
 	| SlackUnknownInteraction;
 
 /** Provider-native Slack view validation response. */
@@ -156,6 +278,11 @@ export interface SlackEventsHandlerInput<E extends Env = Env> {
 export interface SlackInteractionsHandlerInput<E extends Env = Env> {
 	c: Context<E>;
 	interaction: SlackInteraction;
+}
+
+export interface SlackCommandsHandlerInput<E extends Env = Env> {
+	c: Context<E>;
+	command: SlackSlashCommand;
 }
 
 /** Verified ingress and canonical identity helpers. */
@@ -211,8 +338,22 @@ export function createSlackChannel<E extends Env = Env>(
 			}),
 		});
 	}
+	if (options.commands) {
+		routes.push({
+			method: 'POST',
+			path: '/commands',
+			handler: createSlackCommandsHandler({
+				signingSecret,
+				appId,
+				teamId,
+				bodyLimit: options.bodyLimit,
+				handlerTimeoutMs: options.handlerTimeoutMs,
+				commands: options.commands,
+			}),
+		});
+	}
 	if (routes.length === 0) {
-		throw new TypeError('createSlackChannel() requires an events or interactions handler.');
+		throw new TypeError('createSlackChannel() requires an events, interactions, or commands handler.');
 	}
 
 	const channel: SlackChannel<E> = {
@@ -258,6 +399,9 @@ function validateOptions<E extends Env>(options: SlackChannelOptions<E>): void {
 	}
 	if (options.interactions !== undefined && typeof options.interactions !== 'function') {
 		throw new TypeError('Slack interactions handler must be a function.');
+	}
+	if (options.commands !== undefined && typeof options.commands !== 'function') {
+		throw new TypeError('Slack commands handler must be a function.');
 	}
 }
 

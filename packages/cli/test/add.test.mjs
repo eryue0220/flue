@@ -86,6 +86,7 @@ describe('flue add', () => {
 		assert.ok(result.stdout.includes('export const channel'));
 		assert.ok(result.stdout.includes('export const client'));
 		assert.ok(result.stdout.includes('@slack/web-api@^8.0.0-rc.1'));
+		assert.ok(result.stdout.includes('/channels/slack/commands'));
 		assert.ok(!result.stdout.startsWith('---'));
 	});
 

@@ -1051,6 +1051,131 @@ Final reference gap audit:
   ids are exposed for applications that need them.
 - No justified ingress gap remains.
 
+### Slack — 2026-06-13
+
+Status:
+
+- Complete.
+
+Reference capability brief:
+
+- The high-level adapter documentation describes Events API messages and
+  mentions, slash commands, Block Kit interactions, shortcuts, modals,
+  single-workspace and multi-workspace OAuth modes, Socket Mode, and broad Web
+  API operations.
+- No reference implementation, architecture, types, fixtures, payloads,
+  snapshots, or tests were consulted.
+
+Primary sources:
+
+- Slack request-signature verification documentation.
+- Slack Events API envelope, retry, authorization, and acknowledgement
+  documentation.
+- Slack `url_verification` event reference.
+- Slack slash-command implementation and payload documentation.
+- Slack interaction acknowledgement and payload references for block actions,
+  views, shortcuts, and block suggestions.
+- Official `@slack/web-api` v8 release-candidate declarations, package source,
+  and npm metadata.
+
+Clean-room affirmation:
+
+- All normalized types, synthetic forms and JSON payloads, fake ids, assertions,
+  and tests were designed from Slack's official documentation and Flue's
+  existing channel contract. Nothing was copied or translated from Chat SDK
+  source or tests.
+
+Decisions:
+
+- Keep the fixed-application, fixed-workspace v1 boundary and explicitly reject
+  org-wide installations. OAuth installation storage and Socket Mode remain
+  outside the HTTP channel package.
+- Add optional `POST /commands` ingress alongside the existing optional
+  `/events` and `/interactions` surfaces.
+- Accept Slack's signed URL-verification challenge without requiring app or
+  workspace fields that Slack does not send in that payload.
+- Normalize configured app identity for interaction variants that do not send
+  `api_app_id`, while rejecting a mismatched id when one is present.
+- Expand known interactions to message- or view-based block actions, view
+  submissions and closures, global and message shortcuts, and block
+  suggestions. Continue forwarding other verified variants as explicit
+  unknown interactions.
+- Expose `trigger_id`, `response_url`, and view response URLs under an explicit
+  short-lived `capabilities` object with a hard documentation boundary against
+  dispatch, model context, logging, and persistence.
+- Keep the Fetch-based official `@slack/web-api` v8 release candidate as the
+  project-owned outbound client, subject to the existing real workerd
+  execution gate with `nodejs_compat`.
+
+Tests:
+
+- Retained exact-byte HMAC, timestamp, body limit, response, retry, identity,
+  event, interaction, and canonical-thread coverage.
+- Added original synthetic slash-command forms, identity and org-install
+  rejection, identity-free URL verification, global shortcuts without
+  `api_app_id`, view-origin actions, view closures, block suggestions, and
+  workerd execution of commands and shortcuts.
+
+Validation:
+
+- Package build, strict typecheck, Node tests, and workerd tests pass.
+- Example strict typecheck, real `WebClient` workerd test, Node build, and
+  Cloudflare build pass.
+- A built Node server returns the documented URL-verification challenge for an
+  original valid signed request without app/workspace fields and returns `401`
+  for an invalid signature.
+- Documentation check and production build pass.
+- The real `flue add` CLI test suite passes and verifies the generated Slack
+  recipe includes the optional commands route.
+- Prepared publish docs were regenerated.
+- The packed package contains the intended runtime declarations, JavaScript,
+  README, license, and prepared docs without an outbound client or tool.
+- A clean strict TypeScript consumer compiles against the packed tarball and
+  narrows slash-command and expanded interaction variants.
+
+Focused review:
+
+- Reviewed the complete provider diff for exact-byte verification, replay
+  window, identity boundaries, org-install rejection, form parsing, capability
+  handling, acknowledgement deadlines, response serialization, public
+  declarations, and Cloudflare execution.
+- Corrected three pre-existing protocol assumptions found during review:
+  URL-verification payloads do not contain app/workspace identity, shortcuts
+  may omit `api_app_id`, and block actions may originate from views without
+  message context.
+- Aligned new active-suite test names with repository conventions.
+- No unresolved correctness findings remain.
+
+Deviations:
+
+- None.
+
+Deferrals:
+
+- OAuth, installation storage, token rotation, Socket Mode, and long-lived
+  transports remain outside the fixed-workspace HTTP package.
+
+Final reference gap audit:
+
+- Reopened only the pinned high-level Slack adapter README, capability matrix,
+  and adapter registry after implementation; no reference source or test files
+  were used.
+- Events API messages and mentions, slash commands, block actions, external
+  select suggestions, modal submissions and closures, and global/message
+  shortcuts are represented as verified HTTP ingress.
+- Other signed Events API and interaction variants remain available through
+  explicit unknown variants instead of forcing a prematurely exhaustive event
+  registry.
+- Posting, editing, deleting, reactions, files, streaming, history, custom API
+  endpoints, and other broad outbound capabilities remain available through
+  the project-owned `WebClient` rather than a Flue abstraction.
+- Token rotation and dynamic client selection remain application-owned client
+  initialization concerns.
+- Multi-workspace OAuth, installation storage, token encryption, org-wide
+  installs, Socket Mode, and socket forwarding remain deliberately outside the
+  fixed-workspace HTTP package.
+- No justified fixed-workspace HTTP ingress gap remains.
+
 ## Implementation log template
 
 Append one section per provider while implementing:

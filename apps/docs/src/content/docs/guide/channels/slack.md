@@ -21,6 +21,7 @@ Configure only the surfaces your application uses:
 ```txt
 https://example.com/channels/slack/events
 https://example.com/channels/slack/interactions
+https://example.com/channels/slack/commands
 ```
 
 `SLACK_SIGNING_SECRET` verifies inbound bytes. `SLACK_APP_ID` and
@@ -71,6 +72,12 @@ export const channel = createSlackChannel({
   // async interactions({ interaction }) {
   //   return;
   // },
+
+  // Enable only when this application handles slash commands.
+  // Path: /channels/slack/commands
+  // async commands({ c, command }) {
+  //   return c.json({ response_type: 'ephemeral', text: `Received ${command.command}` });
+  // },
 });
 
 export function replyInThread(ref: { channelId: string; threadTs: string }) {
@@ -95,10 +102,13 @@ export function replyInThread(ref: { channelId: string; threadTs: string }) {
 }
 ```
 
-Omitting `events` or `interactions` omits that route. The Events API supports
-normalized `app_mention` and plain user `message` variants. Unsupported
-verified events and interactions reach the callback as `type: 'unknown'`.
-Slack URL verification is handled internally.
+Omitting `events`, `interactions`, or `commands` omits that route. The Events
+API supports normalized `app_mention` and plain user `message` variants.
+Interactivity supports actions, view submissions and closures, global and
+message shortcuts, and block suggestions. Unsupported verified events and
+interactions reach the callback as `type: 'unknown'`. Slack URL verification is
+handled internally from its signed challenge; that request does not include app
+or workspace identity fields.
 
 For a view submission, return Slack's native validation body or an ordinary
 Hono response. An empty callback result becomes an empty `200`.
@@ -116,10 +126,14 @@ export default createAgent(({ id }) => ({
 ```
 
 The model selects message text; trusted code binds the workspace, channel, and
-thread. Never copy a signed `response_url` from `interaction.raw` into
-dispatched input or a model-facing tool.
+thread. Interaction and slash-command `capabilities` can contain short-lived
+`triggerId`, `responseUrl`, and view response URL values. Use them only in
+immediate trusted application code. Never place them in dispatch input, model
+context, logs, or durable session data.
 
 Slack may retry failed or timed-out Events API deliveries. Claim `eventId` in
 application-owned durable storage when duplicate admission is unacceptable.
+Every callback has a default and maximum 2.5-second deadline so Flue can respond
+before Slack's three-second acknowledgement window.
 
 See the [`@flue/slack` API reference](/docs/api/slack-channel/).

@@ -39,6 +39,62 @@ describe('@flue/slack workerd ingress', () => {
 		expect(changed.status).toBe(401);
 		expect(events).toHaveBeenCalledOnce();
 	});
+
+	it('normalizes slash commands and shortcuts when running in workerd', async () => {
+		const commands = vi.fn();
+		const interactions = vi.fn();
+		const slack = createSlackChannel({
+			signingSecret: 'secret',
+			appId: 'A123',
+			teamId: 'T123',
+			commands,
+			interactions,
+		});
+		const app = new Hono();
+		for (const route of slack.routes) app.on(route.method, route.path, route.handler);
+
+		const commandResponse = await app.request(
+			await signedFormRequest(
+				'/commands',
+				new URLSearchParams({
+					api_app_id: 'A123',
+					team_id: 'T123',
+					channel_id: 'C123',
+					user_id: 'U123',
+					command: '/triage',
+					text: 'incident 42',
+					trigger_id: 'command-trigger',
+					response_url: 'https://hooks.slack.test/commands/response',
+				}).toString(),
+			),
+		);
+		const shortcutResponse = await app.request(
+			await signedFormRequest(
+				'/interactions',
+				new URLSearchParams({
+					payload: JSON.stringify({
+						type: 'shortcut',
+						team: { id: 'T123' },
+						user: { id: 'U123' },
+						callback_id: 'open_triage',
+						trigger_id: 'shortcut-trigger',
+					}),
+				}).toString(),
+			),
+		);
+
+		expect(commandResponse.status).toBe(200);
+		expect(shortcutResponse.status).toBe(200);
+		expect(commands.mock.calls[0]?.[0].command).toMatchObject({
+			type: 'slash_command',
+			command: '/triage',
+			text: 'incident 42',
+		});
+		expect(interactions.mock.calls[0]?.[0].interaction).toMatchObject({
+			type: 'shortcut',
+			callbackId: 'open_triage',
+		});
+	});
 });
 
 async function hmac(value: string): Promise<string> {
@@ -51,4 +107,18 @@ async function hmac(value: string): Promise<string> {
 	);
 	const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(value)));
 	return Array.from(signature, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function signedFormRequest(path: string, body: string): Promise<Request> {
+	const timestamp = Math.floor(Date.now() / 1000);
+	const signature = await hmac(`v0:${timestamp}:${body}`);
+	return new Request(`https://example.test${path}`, {
+		method: 'POST',
+		headers: {
+			'content-type': 'application/x-www-form-urlencoded',
+			'x-slack-request-timestamp': String(timestamp),
+			'x-slack-signature': `v0=${signature}`,
+		},
+		body,
+	});
 }
