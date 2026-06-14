@@ -335,7 +335,7 @@ function createSharedViteConfig(root: string, bootstrapEntries: readonly string[
 	return {
 		configFile: false as const,
 		root,
-		plugins: [importAttributePlugin({ root, bootstrapEntries })],
+		plugins: [importAttributePlugin({ bootstrapEntries })],
 	};
 }
 

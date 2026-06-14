@@ -10,8 +10,6 @@ const PACKAGED_SKILLS_MODULE_ID = 'virtual:flue/packaged-skills';
 const RESOLVED_PACKAGED_SKILLS_MODULE_ID = '\0virtual:flue/packaged-skills';
 const SKILL_MODULE_PREFIX = '\0flue-skill:';
 const ENCODED_SKILL_MODULE_PREFIX = '__x00__flue-skill:';
-const SKILL_METADATA_QUERY = '?flue-skill-metadata';
-const SKILL_FILE_QUERY = '?flue-skill-file';
 const PACKAGED_FILE_WARNING_BYTES = 1024 * 1024;
 const EXCLUDED_DIRECTORIES = new Set([
 	'.git',
@@ -26,7 +24,6 @@ const EXCLUDED_FILES = new Set(['.netrc', '.npmrc', '.pypirc', '_netrc', 'creden
 const SENSITIVE_FILE_PATTERNS = [/\.key$/i, /\.pem$/i, /\.p12$/i, /\.pfx$/i, /^secrets?(?:\.|$)/i];
 
 export interface ImportAttributePluginOptions {
-	root: string;
 	bootstrapEntries?: readonly string[];
 }
 
@@ -38,7 +35,6 @@ export interface ImportAttributePluginOptions {
  */
 export function importAttributePlugin(options: ImportAttributePluginOptions): Plugin {
 	let viteRoot = '';
-	const projectRoot = canonicalPath(path.resolve(options.root));
 	const bootstrapEntries = new Set(
 		(options.bootstrapEntries ?? []).map((entry) => canonicalPath(path.resolve(entry))),
 	);
@@ -98,14 +94,24 @@ export function importAttributePlugin(options: ImportAttributePluginOptions): Pl
 						`[flue] Skill imports must target a SKILL.md file: ${declaration.specifier}`,
 					);
 				}
-				if (!declaration.specifier.startsWith('.')) {
+				const resolved = await this.resolve(declaration.specifier, importerPath, {
+					skipSelf: true,
+				});
+				if (!resolved || resolved.external) {
+					throw new Error(`[flue] Unable to resolve skill import: ${declaration.specifier}`);
+				}
+				const filesystemPath = stripQueryAndHash(resolved.id);
+				if (!path.isAbsolute(filesystemPath)) {
 					throw new Error(
-						`[flue] Skill import "${declaration.specifier}" must use a relative path to a SKILL.md inside the project root (for example "./skills/review/SKILL.md"). Bare and absolute specifiers are unsupported because imported skills are packaged into the deployed application.`,
+						`[flue] Skill imports must resolve to a filesystem path: ${declaration.specifier}`,
 					);
 				}
-				const authoredPath = path.resolve(path.dirname(importerPath), declaration.specifier);
-				assertPackagedSkillPath(authoredPath, projectRoot);
-				const resolvedPath = canonicalPath(authoredPath);
+				const resolvedPath = canonicalPath(filesystemPath);
+				if (!isSkillMarkdownPath(resolvedPath)) {
+					throw new Error(
+						`[flue] Skill imports must resolve to a SKILL.md file: ${declaration.specifier}`,
+					);
+				}
 				replacements.push({
 					...declaration,
 					moduleId: `${internalSkillModulePrefix}${resolvedPath}`,
@@ -138,14 +144,6 @@ export function importAttributePlugin(options: ImportAttributePluginOptions): Pl
 					"[flue] Internal packaged-skill module IDs cannot be imported directly. Use a static SKILL.md import with { type: 'skill' }.",
 				);
 			}
-			if (source.endsWith(SKILL_METADATA_QUERY) || source.endsWith(SKILL_FILE_QUERY)) {
-				if (!importer?.startsWith(internalSkillModulePrefix)) {
-					throw new Error(
-						"[flue] Internal packaged-skill resources cannot be imported directly. Import SKILL.md with { type: 'skill' }.",
-					);
-				}
-				return source;
-			}
 			if (!importer) return null;
 			if (isSkillMarkdownPath(source)) {
 				throw new Error(
@@ -163,8 +161,6 @@ export function importAttributePlugin(options: ImportAttributePluginOptions): Pl
 			if (directory) {
 				const skillPath = `${directory}/SKILL.md`;
 				const modules = [
-					this.environment.moduleGraph.getModuleById(`${changedPath}${SKILL_FILE_QUERY}`),
-					this.environment.moduleGraph.getModuleById(`${skillPath}${SKILL_METADATA_QUERY}`),
 					this.environment.moduleGraph.getModuleById(`${internalSkillModulePrefix}${skillPath}`),
 				].filter((module) => module !== undefined);
 				for (const module of modules) this.environment.moduleGraph.invalidateModule(module);
@@ -192,52 +188,20 @@ export function importAttributePlugin(options: ImportAttributePluginOptions): Pl
 					'export function getPackagedSkills() { return Object.fromEntries(packagedSkills); }',
 				].join('\n');
 			}
-			if (id.endsWith(SKILL_METADATA_QUERY)) {
-				const skillPath = id.slice(0, -SKILL_METADATA_QUERY.length);
-				const metadata = await readSkillMetadata(skillPath, projectRoot);
-				return `export default ${JSON.stringify(metadata)};`;
-			}
-			if (id.endsWith(SKILL_FILE_QUERY)) {
-				const filePath = id.slice(0, -SKILL_FILE_QUERY.length);
-				const content = await fs.promises.readFile(filePath);
-				if (content.byteLength > PACKAGED_FILE_WARNING_BYTES) {
-					console.warn(
-						`[flue] Skill file "${filePath}" exceeds 1MB and will be packaged into the deployed application for lazy access.`,
-					);
-				}
-				const file: PackagedSkillFile = {
-					encoding: 'base64',
-					kind: isTextContent(content) ? 'text' : 'binary',
-					content: content.toString('base64'),
-				};
-				return `export default ${JSON.stringify(file)};`;
-			}
 			if (!id.startsWith(internalSkillModulePrefix)) return null;
 			const skillPath = id.slice(internalSkillModulePrefix.length);
 			const directory = path.dirname(skillPath);
 			trackedSkillDirectories.add(canonicalPath(directory));
-			const metadata = await readSkillMetadata(skillPath, projectRoot);
-			const files = await collectFiles(directory);
-			const metadataModuleId = `${skillPath}${SKILL_METADATA_QUERY}`;
-			const imports = [`import metadata from ${JSON.stringify(metadataModuleId)};`];
-			const entries: string[] = [];
-			for (const [index, absolutePath] of files.entries()) {
-				const relativePath = normalizePath(path.relative(directory, absolutePath));
-				const canonicalFilePath = canonicalPath(absolutePath);
-				const fileModuleId = `${canonicalFilePath}${SKILL_FILE_QUERY}`;
-				imports.push(`import file${index} from ${JSON.stringify(fileModuleId)};`);
-				entries.push(`${JSON.stringify(relativePath)}: file${index}`);
-			}
+			const packagedSkill = await packageSkill(skillPath);
 			const reference: SkillReference = {
 				__flueSkillReference: true,
-				id: metadata.id,
-				name: metadata.name,
-				description: metadata.description,
+				id: packagedSkill.id,
+				name: packagedSkill.name,
+				description: packagedSkill.description,
 			};
 			return [
 				`import { registerPackagedSkill, unregisterPackagedSkill } from ${JSON.stringify(PACKAGED_SKILLS_MODULE_ID)};`,
-				...imports,
-				`const directory = { ...metadata, files: { ${entries.join(', ')} } };`,
+				`const directory = ${JSON.stringify(packagedSkill)};`,
 				'registerPackagedSkill(directory);',
 				'if (import.meta.hot) import.meta.hot.dispose(() => unregisterPackagedSkill(directory));',
 				`const reference = ${JSON.stringify(reference)};`,
@@ -247,52 +211,41 @@ export function importAttributePlugin(options: ImportAttributePluginOptions): Pl
 	};
 }
 
-async function readSkillMetadata(
-	skillPath: string,
-	projectRoot: string,
-): Promise<Omit<PackagedSkillDirectory, 'files'>> {
+async function packageSkill(skillPath: string): Promise<PackagedSkillDirectory> {
 	const directory = path.dirname(skillPath);
-	const relativeDirectory = stableProjectRelativePath(directory, projectRoot);
-	const raw = await fs.promises.readFile(skillPath, 'utf8');
-	const parsed = parseSkillMarkdown(raw, {
+	const parsed = parseSkillMarkdown(await fs.promises.readFile(skillPath, 'utf8'), {
 		directoryName: path.basename(directory),
 		path: skillPath,
 	});
-	return {
-		id: `skill:${parsed.name}:${createHash('sha256').update(relativeDirectory).digest('hex').slice(0, 16)}`,
-		name: parsed.name,
-		description: parsed.description,
-	};
-}
-
-function stableProjectRelativePath(directory: string, projectRoot: string): string {
-	const relativePath = normalizePath(path.relative(projectRoot, canonicalPath(directory)));
-	if (relativePath === '' || relativePath === '..' || relativePath.startsWith('../')) {
-		throw new Error(
-			`[flue] Imported skill directory "${directory}" must be inside project root "${projectRoot}" so it can be packaged with a stable identity.`,
-		);
-	}
-	return relativePath;
-}
-
-function assertPackagedSkillPath(skillPath: string, projectRoot: string): void {
-	const normalizedSkillPath = normalizePath(path.resolve(skillPath));
-	const relativePath = normalizePath(path.relative(projectRoot, normalizedSkillPath));
-	if (relativePath === '..' || relativePath.startsWith('../')) {
-		throw new Error(
-			`[flue] Imported skill "${skillPath}" must be inside project root "${projectRoot}" because imported skills are packaged into the deployed application.`,
-		);
-	}
-	let currentPath = projectRoot;
-	for (const segment of relativePath.split('/')) {
-		if (!segment) continue;
-		currentPath = path.join(currentPath, segment);
-		if (fs.existsSync(currentPath) && fs.lstatSync(currentPath).isSymbolicLink()) {
-			throw new Error(
-				`[flue] Skill import "${skillPath}" traverses symbolic link "${currentPath}", which cannot be packaged. Replace it with a regular file or directory.`,
+	const files: Record<string, PackagedSkillFile> = {};
+	const hash = createHash('sha256');
+	for (const filePath of await collectFiles(directory)) {
+		const relativePath = normalizePath(path.relative(directory, filePath));
+		const content = await fs.promises.readFile(filePath);
+		if (content.byteLength > PACKAGED_FILE_WARNING_BYTES) {
+			console.warn(
+				`[flue] Skill file "${filePath}" exceeds 1MB and will be packaged into the deployed application for lazy access.`,
 			);
 		}
+		const pathBuffer = Buffer.from(relativePath);
+		const lengths = Buffer.allocUnsafe(8);
+		lengths.writeUInt32BE(pathBuffer.byteLength, 0);
+		lengths.writeUInt32BE(content.byteLength, 4);
+		hash.update(lengths);
+		hash.update(pathBuffer);
+		hash.update(content);
+		files[relativePath] = {
+			encoding: 'base64',
+			kind: isTextContent(content) ? 'text' : 'binary',
+			content: content.toString('base64'),
+		};
 	}
+	return {
+		id: `skill:${parsed.name}:${hash.digest('hex').slice(0, 16)}`,
+		name: parsed.name,
+		description: parsed.description,
+		files,
+	};
 }
 
 function canonicalPath(filePath: string): string {
@@ -401,8 +354,12 @@ function isAuthorizedPackagedStoreImporter(
 	return bootstrapEntries.has(canonicalPath(importer.split('?')[0] ?? importer));
 }
 
+function stripQueryAndHash(specifier: string): string {
+	return specifier.split(/[?#]/, 1)[0] ?? specifier;
+}
+
 function isSkillMarkdownPath(specifier: string): boolean {
-	return path.basename(specifier.split(/[?#]/, 1)[0] ?? '') === 'SKILL.md';
+	return path.basename(stripQueryAndHash(specifier)) === 'SKILL.md';
 }
 
 interface ModuleAst {

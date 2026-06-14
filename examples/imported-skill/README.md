@@ -18,10 +18,4 @@ pnpm exec flue run with-custom-bash --target node
 pnpm exec flue dev --target cloudflare
 ```
 
-Cloudflare builds and local development use the official Vite/workerd integration. The release integration tests install packed `@flue/runtime` and `@flue/cli` copies of this example and activate the packaged skill deterministically without provider credentials.
-
-From the repository root, run the slow production-path integration gate with:
-
-```bash
-pnpm run test:integration
-```
+Cloudflare builds and local development use the official Vite/workerd integration.

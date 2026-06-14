@@ -10,9 +10,9 @@ Skills guide agent work; they do not add executable capabilities. Use [tools](/d
 
 ## Add a skill
 
-Flue lets you keep an Agent Skill alongside the agents and workflows that use it. When you import that skill, Flue packages its instructions and supporting files with your application so an initialized harness can use it without depending on files in its runtime workspace.
+Flue lets you import an Agent Skill from your project or an installed package. Flue packages its instructions and supporting files with your application so an initialized harness can use it without depending on files in its runtime workspace.
 
-Add an existing Agent Skill directory anywhere within your project root. This guide uses `src/skills/` to keep application-owned skills next to authored source:
+To keep an application-owned skill next to the agents and workflows that use it, add its directory to your project. This guide uses `src/skills/`:
 
 ```text title="Application-owned skill"
 src/
@@ -47,7 +47,15 @@ export default createAgent(() => ({
 
 Each import produces a skill reference and includes that skill directory in the application build. Passing those references in `skills` makes the skills available to this agent by their declared names.
 
-Imported skill directories are deployed application content: ordinary supporting files beside `SKILL.md` are included without additional imports. Do not store credentials, private keys, or runtime secrets in a skill directory that your application imports. Flue rejects common sensitive files and unsafe symbolic-link boundaries when packaging imported skills.
+Skills can also be imported from installed packages:
+
+```ts
+import review from '@acme/review-skills/review/SKILL.md' with { type: 'skill' };
+```
+
+The package must publish `SKILL.md` and its supporting files. If it defines package exports, it must export the imported `SKILL.md` subpath.
+
+Imported skill directories are deployed application content: ordinary supporting files beside `SKILL.md` are included without additional imports. Do not store credentials, private keys, or runtime secrets in a skill directory that your application imports. Flue rejects common sensitive files and symbolic links inside imported skill directories when packaging them.
 
 Flue also loads skills from the sandbox where a harness runs, with no import required. At context initialization, it discovers [Agent Skills](https://agentskills.io/specification)-compatible directories under `<cwd>/.agents/skills/`:
 

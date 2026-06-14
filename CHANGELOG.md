@@ -28,6 +28,7 @@
 - Cloudflare attempt markers are now Flue-owned rather than querying private Agents SDK tables.
 - `flue logs` treats `--since` as an opaque Durable Streams offset, supports `--format ndjson`, and uses public run metadata.
 - Many bug fixes landed across Node and Cloudflare execution, SDK stream iteration, CLI shutdown and reload, Workers AI streaming, sandbox filesystem behavior, skill parsing, docs, and test coverage.
+- Skills can now be imported from npm and workspace packages through Vite resolution; package-manager symlinks are supported, and packaged skill identity is derived from deployed content.
 - Added a same-origin React chat example with agent conversation and workflow log views.
 
 ## 0.11.1 - 2026-06-11
