@@ -64,6 +64,7 @@ before(async () => {
 			daytona: 'sandbox--daytona.md',
 			postgres: 'database--postgres.md',
 			libsql: 'database--libsql.md',
+			mongodb: 'database--mongodb.md',
 			mysql: 'database--mysql.md',
 			redis: 'database--redis.md',
 			supabase: 'database--supabase.md',
@@ -151,6 +152,10 @@ describe('flue add', () => {
 		assert.match(
 			result.stderr,
 			/flue add database libsql\s+database\s+https:\/\/github\.com\/tursodatabase\/libsql/,
+		);
+		assert.match(
+			result.stderr,
+			/flue add database mongodb\s+database\s+https:\/\/www\.mongodb\.com/,
 		);
 		assert.match(result.stderr, /flue add database mysql\s+database\s+https:\/\/www\.mysql\.com/);
 		assert.match(result.stderr, /flue add database redis\s+database\s+https:\/\/redis\.io/);
@@ -392,6 +397,27 @@ describe('flue add', () => {
 		assert.ok(libsql.stdout.includes('const serialize'));
 		assert.ok(libsql.stdout.includes('tx.close()'));
 
+		const mongodb = await runCli(['add', 'database', 'mongodb', '--print']);
+		assert.equal(mongodb.code, 0);
+		assert.ok(mongodb.stdout.includes('@flue/mongodb'));
+		assert.ok(mongodb.stdout.includes("from 'mongodb'"));
+		assert.ok(mongodb.stdout.includes('// flue-blueprint: database/mongodb@1'));
+		assert.ok(mongodb.stdout.includes('MONGODB_URL'));
+		assert.ok(mongodb.stdout.includes('MONGODB_DATABASE'));
+		assert.ok(mongodb.stdout.includes('const queue'));
+		assert.ok(mongodb.stdout.includes("readConcern: { level: 'snapshot' }"));
+		assert.ok(mongodb.stdout.includes("writeConcern: { w: 'majority' }"));
+		assert.ok(mongodb.stdout.includes("'TransientTransactionError'"));
+		assert.ok(mongodb.stdout.includes("'UnknownTransactionCommitResult'"));
+		assert.ok(mongodb.stdout.includes('commitAttempt < 10'));
+		assert.ok(mongodb.stdout.includes("hello.msg === 'isdbgrid'"));
+		assert.ok(mongodb.stdout.includes('db.createCollection'));
+		assert.ok(mongodb.stdout.includes('db.collection(name).listIndexes()'));
+		assert.ok(mongodb.stdout.includes('close: () => client.close()'));
+		assert.ok(mongodb.stdout.includes('standalone `mongod` is unsupported'));
+		assert.ok(mongodb.stdout.includes('This comparison is required when the marker is missing.'));
+		assert.ok(mongodb.stdout.includes('### Version 1 — 2026-06-15\n\nInitial version.'));
+
 		const mysql = await runCli(['add', 'database', 'mysql', '--print']);
 		assert.equal(mysql.code, 0);
 		assert.ok(mysql.stdout.includes('@flue/mysql'));
@@ -513,6 +539,16 @@ describe('flue update', () => {
 
 		assert.equal(updated.code, 0);
 		assert.equal(updated.stdout, added.stdout);
+	});
+
+	it('prints the exact same MongoDB blueprint as flue add', async () => {
+		const added = await runCli(['add', 'database', 'mongodb', '--print']);
+		const updated = await runCli(['update', 'database', 'mongodb', '--print']);
+
+		assert.equal(updated.code, 0);
+		assert.equal(updated.stdout, added.stdout);
+		assert.ok(updated.stdout.includes('// flue-blueprint: database/mongodb@1'));
+		assert.ok(updated.stdout.includes('This comparison is required when the marker is missing.'));
 	});
 
 	it('prints the exact same MySQL blueprint as flue add', async () => {
