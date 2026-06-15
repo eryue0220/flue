@@ -240,8 +240,10 @@ export const docsSections: DocsSection[] = [
 					{ title: 'libSQL', slug: 'ecosystem/databases/libsql' },
 					{ title: 'MySQL', slug: 'ecosystem/databases/mysql' },
 					{ title: 'Postgres', slug: 'ecosystem/databases/postgres' },
+					{ title: 'Redis', slug: 'ecosystem/databases/redis' },
 					{ title: 'Supabase', slug: 'ecosystem/databases/supabase' },
 					{ title: 'Turso', slug: 'ecosystem/databases/turso' },
+					{ title: 'Valkey', slug: 'ecosystem/databases/valkey' },
 				],
 			},
 			{

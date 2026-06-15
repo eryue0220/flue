@@ -65,8 +65,10 @@ before(async () => {
 			postgres: 'database--postgres.md',
 			libsql: 'database--libsql.md',
 			mysql: 'database--mysql.md',
+			redis: 'database--redis.md',
 			supabase: 'database--supabase.md',
 			turso: 'database--turso.md',
+			valkey: 'database--valkey.md',
 		};
 		const file = slug ? files[slug] : undefined;
 		if (!file) {
@@ -151,8 +153,10 @@ describe('flue add', () => {
 			/flue add database libsql\s+database\s+https:\/\/github\.com\/tursodatabase\/libsql/,
 		);
 		assert.match(result.stderr, /flue add database mysql\s+database\s+https:\/\/www\.mysql\.com/);
+		assert.match(result.stderr, /flue add database redis\s+database\s+https:\/\/redis\.io/);
 		assert.match(result.stderr, /flue add database supabase\s+database\s+https:\/\/supabase\.com/);
 		assert.match(result.stderr, /flue add database turso\s+database\s+https:\/\/turso\.tech/);
+		assert.match(result.stderr, /flue add database valkey\s+database\s+https:\/\/valkey\.io/);
 		assert.ok(result.stderr.includes('flue add sandbox <url>'));
 		assert.ok(result.stderr.includes('flue add channel <url>'));
 		assert.ok(result.stderr.includes('flue add database <url>'));
@@ -419,6 +423,26 @@ describe('flue add', () => {
 		assert.ok(turso.stdout.includes('@flue/libsql'));
 		assert.ok(turso.stdout.includes('TURSO_DATABASE_URL'));
 		assert.ok(turso.stdout.includes('tx.close()'));
+
+		for (const [name, url] of [
+			['redis', 'REDIS_URL'],
+			['valkey', 'VALKEY_URL'],
+		]) {
+			const result = await runCli(['add', 'database', name, '--print']);
+			assert.equal(result.code, 0);
+			assert.ok(result.stdout.includes('@flue/redis'));
+			assert.ok(result.stdout.includes("from 'redis'"));
+			assert.ok(result.stdout.includes(`// flue-blueprint: database/${name}@1`));
+			assert.ok(result.stdout.includes(url));
+			assert.ok(result.stdout.includes('command:'));
+			assert.ok(result.stdout.includes('eval:'));
+			assert.ok(result.stdout.includes('pipeline:'));
+			assert.ok(result.stdout.includes('if (result instanceof Error) throw result'));
+			assert.ok(result.stdout.includes('close:'));
+			assert.ok(result.stdout.includes('inspectServer: false'));
+			assert.ok(result.stdout.includes('keyPrefix'));
+			assert.ok(result.stdout.includes('This comparison is required when the marker is missing.'));
+		}
 	});
 
 	it('substitutes any absolute research URL into the generic kind blueprint', async () => {
@@ -507,6 +531,17 @@ describe('flue update', () => {
 		assert.equal(updated.code, 0);
 		assert.equal(updated.stdout, added.stdout);
 		assert.ok(updated.stdout.includes('// flue-blueprint: database/supabase@1'));
+	});
+
+	it('prints the exact same Redis and Valkey blueprints as flue add', async () => {
+		for (const name of ['redis', 'valkey']) {
+			const added = await runCli(['add', 'database', name, '--print']);
+			const updated = await runCli(['update', 'database', name, '--print']);
+
+			assert.equal(updated.code, 0);
+			assert.equal(updated.stdout, added.stdout);
+			assert.ok(updated.stdout.includes(`// flue-blueprint: database/${name}@1`));
+		}
 	});
 
 	it('prints the exact same URL-substituted blueprint as flue add', async () => {
