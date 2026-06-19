@@ -1,4 +1,5 @@
 import {
+	createAgent,
 	defineTool,
 	type FlueContext,
 	type WorkflowRouteHandler,
@@ -19,7 +20,8 @@ export const route: WorkflowRouteHandler = async (_c, next) => next();
 export async function run({ init }: FlueContext) {
 	const fs = new InMemoryFs();
 	const sandbox = () => new Bash({ fs, network: { dangerouslyAllowFullInternetAccess: true } });
-	const harness = await init({ sandbox, model: 'anthropic/claude-sonnet-4-6' });
+	const agent = createAgent(() => ({ sandbox, model: 'anthropic/claude-sonnet-4-6' }));
+	const harness = await init(agent);
 	const session = await harness.session();
 
 	const results: Record<string, boolean> = {};

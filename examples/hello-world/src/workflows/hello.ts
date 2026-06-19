@@ -1,10 +1,12 @@
-import type { FlueContext, WorkflowRouteHandler } from '@flue/runtime';
+import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 import * as v from 'valibot';
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
+const agent = createAgent(() => ({ model: 'anthropic/claude-sonnet-4-6' }));
+
 export async function run({ init, log }: FlueContext) {
-	const harness = await init({ model: 'anthropic/claude-sonnet-4-6' });
+	const harness = await init(agent);
 	const session = await harness.session();
 
 	// Test: prompt with structured result

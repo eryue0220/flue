@@ -55,10 +55,11 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
  * ```ts
  * import { islo } from './sandboxes/islo';
  *
- * const harness = await ctx.init({
+ * const agent = createAgent(() => ({
  *   sandbox: islo('my-sandbox'),
  *   model: 'anthropic/claude-sonnet-4-6',
- * });
+ * }));
+ * const harness = await init(agent);
  * ```
  */
 import { spawn } from 'node:child_process';
@@ -290,16 +291,17 @@ into, you can finish that work by wiring the adapter into it. Otherwise,
 share this snippet so they can wire it up themselves.
 
 ```ts
-import type { FlueContext, WorkflowRouteHandler } from '@flue/runtime';
+import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 import { islo } from '../sandboxes/islo'; // adjust path to match the user's layout
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
 
 export async function run ({ init }: FlueContext) {
-  const harness = await init({
+  const agent = createAgent(() => ({
     sandbox: islo('my-sandbox'),
     model: 'anthropic/claude-sonnet-4-6',
-  });
+  }));
+  const harness = await init(agent);
   const session = await harness.session();
 
   return await session.shell('uname -a');

@@ -15,10 +15,10 @@ flue add sandbox cloudflare
 
 ## Overview
 
-Cloudflare Sandbox is a Cloudflare target integration rather than a generated adapter. In a Cloudflare-targeted project, the blueprint installs `@cloudflare/sandbox`; a workflow obtains the bound Durable Object with `getSandbox(...)`, wraps it with Flue's `cloudflareSandbox(...)`, and passes that sandbox factory directly to `ctx.init(...)`.
+Cloudflare Sandbox is a Cloudflare target integration rather than a generated adapter. In a Cloudflare-targeted project, the blueprint installs `@cloudflare/sandbox`; a workflow obtains the bound Durable Object with `getSandbox(...)`, wraps it with Flue's `cloudflareSandbox(...)`, and passes that sandbox factory to a created agent.
 
 ```ts title="<source-root>/workflows/coding-agent.ts (excerpt)"
-import type { FlueContext, WorkflowRouteHandler } from '@flue/runtime';
+import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 import { cloudflareSandbox } from '@flue/runtime/cloudflare';
 import { getSandbox } from '@cloudflare/sandbox';
 
@@ -26,7 +26,8 @@ export const route: WorkflowRouteHandler = async (_c, next) => next();
 
 export async function run({ init, id, env, payload }: FlueContext<{ message: string }>) {
   const sandbox = cloudflareSandbox(getSandbox(env.Sandbox, id));
-  const harness = await init({ sandbox, model: 'anthropic/claude-opus-4-7' });
+  const agent = createAgent(() => ({ sandbox, model: 'anthropic/claude-opus-4-7' }));
+  const harness = await init(agent);
   const session = await harness.session();
 
   return await session.prompt(payload.message);
@@ -62,7 +63,7 @@ import { cloudflareSandbox } from '@flue/runtime/cloudflare';
 
 type Env = { Sandbox: DurableObjectNamespace };
 
-export default createAgent<Env>(({ id, env }) => ({
+export default createAgent<unknown, Env>(({ id, env }) => ({
   model: 'anthropic/claude-sonnet-4-6',
   sandbox: cloudflareSandbox(getSandbox(env.Sandbox, id)),
   cwd: '/workspace',

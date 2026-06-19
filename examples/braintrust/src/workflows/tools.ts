@@ -1,4 +1,5 @@
 import {
+	createAgent,
 	defineTool,
 	type FlueContext,
 	type WorkflowRouteHandler,
@@ -6,6 +7,8 @@ import {
 import * as v from 'valibot';
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
+
+const agent = createAgent(() => ({ model: 'anthropic/claude-haiku-4-5' }));
 
 const lookup = defineTool({
 	name: 'lookup_weather',
@@ -15,7 +18,7 @@ const lookup = defineTool({
 });
 
 export async function run({ init, payload }: FlueContext<{ city?: string }>) {
-	const harness = await init({ model: 'anthropic/claude-haiku-4-5' });
+	const harness = await init(agent);
 	const session = await harness.session();
 	const city = typeof payload.city === 'string' ? payload.city : 'San Francisco';
 	const response = await session.prompt(

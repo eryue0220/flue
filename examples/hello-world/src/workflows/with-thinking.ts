@@ -1,4 +1,5 @@
 import {
+	createAgent,
 	defineAgentProfile,
 	type FlueContext,
 	type WorkflowRouteHandler,
@@ -12,12 +13,13 @@ const auditor = defineAgentProfile({
 	thinkingLevel: 'high',
 });
 
+const agent = createAgent(() => ({
+	model: 'anthropic/claude-haiku-4-5',
+	thinkingLevel: 'low',
+	subagents: [auditor],
+}));
 export async function run({ init }: FlueContext) {
-	const harness = await init({
-		model: 'anthropic/claude-haiku-4-5',
-		thinkingLevel: 'low',
-		subagents: [auditor],
-	});
+	const harness = await init(agent);
 	const session = await harness.session();
 
 	const Answer = v.object({ answer: v.string() });

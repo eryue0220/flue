@@ -64,7 +64,7 @@ import {
 function defineAgentProfile(profile: AgentProfile): AgentProfile;
 ```
 
-Validates and returns a reusable agent profile. Use profiles as the baseline for an addressable agent or workflow harness, or as named subagents available to `session.task()`.
+Validates and returns a reusable agent profile. Use profiles as the baseline for a created agent or as named subagents available to `session.task()`.
 
 Throws when the profile contains unknown fields, invalid capabilities, duplicate capability names, or circular subagents.
 
@@ -185,23 +185,24 @@ interface McpServerConnection {
 ## `createAgent(...)`
 
 ```ts
-function createAgent<TEnv = Record<string, any>>(
+function createAgent<TPayload = unknown, TEnv = Record<string, any>>(
   initialize: (
-    context: AgentCreateContext<TEnv>,
+    context: AgentCreateContext<TPayload, TEnv>,
   ) => AgentRuntimeConfig | Promise<AgentRuntimeConfig>,
-): CreatedAgent<TEnv>;
+): CreatedAgent<TPayload, TEnv>;
 ```
 
-Creates an addressable agent initializer. Default-export the returned value from an `agents/<name>.ts` module. Workflows do not use `createAgent(...)`; they pass an `AgentRuntimeConfig` directly to `ctx.init()`.
+Creates an agent initializer. Default-export the returned value from an `agents/<name>.ts` module to define an addressable agent, or pass it to `ctx.init()` inside a workflow.
 
-The initializer runs whenever the runtime prepares an interaction with the addressable agent. Do not treat it as a one-time constructor for a persistent agent instance id. Return a runtime config object with `model: '<provider>/<model>'`, `model: false`, or a profile with its own model field.
+The initializer runs whenever the runtime initializes a harness from the created agent: when a workflow calls `ctx.init()`, and when the runtime prepares an addressable agent interaction. Do not treat it as a one-time constructor for a persistent agent instance id. Return a runtime config object with `model: '<provider>/<model>'`, `model: false`, or a profile with its own model field.
 
 #### `AgentCreateContext`
 
-| Field | Type     | Description                                            |
-| ----- | -------- | ------------------------------------------------------ |
-| `id`  | `string` | Agent instance id.                                     |
-| `env` | `TEnv`   | Platform environment bindings supplied by the runtime. |
+| Field     | Type                    | Description                                                                 |
+| --------- | ----------------------- | --------------------------------------------------------------------------- |
+| `id`      | `string`                | Agent instance id, or workflow run id when initialized with `ctx.init()`.   |
+| `env`     | `TEnv`                  | Platform environment bindings supplied by the runtime.                      |
+| `payload` | `TPayload \| undefined` | Workflow payload when initialized with `ctx.init()`; otherwise `undefined`. |
 
 #### `AgentRuntimeConfig`
 
@@ -222,7 +223,7 @@ The initializer runs whenever the runtime prepares an interaction with the addre
 
 #### `CreatedAgent`
 
-`CreatedAgent` is the opaque addressable agent initializer returned by `createAgent()`.
+`CreatedAgent` is the opaque initializer value returned by `createAgent()`.
 
 ## `dispatch(...)`
 
@@ -269,7 +270,7 @@ interface FlueContext<TPayload = unknown, TEnv = Record<string, any>> {
   readonly env: TEnv;
   readonly req: Request | undefined;
   readonly log: FlueLogger;
-  init(config: AgentRuntimeConfig, options?: AgentHarnessOptions): Promise<FlueHarness>;
+  init(agent: CreatedAgent<TPayload, TEnv>, options?: AgentHarnessOptions): Promise<FlueHarness>;
 }
 ```
 
@@ -282,7 +283,7 @@ The execution context passed to workflow handlers. Pass type parameters to type 
 | `env`     | `TEnv`                 | Platform env bindings: `process.env` on Node.js, the Worker env on Cloudflare.           |
 | `req`     | `Request \| undefined` | The standard Fetch `Request` for the current invocation. See [`ctx.req`](#ctxreq) below. |
 | `log`     | `FlueLogger`           | Emit observable structured log events. See [`ctx.log`](#ctxlog) below.                   |
-| `init`    | function               | Initialize a harness for this invocation. See [`ctx.init(...)`](#ctxinit) below.         |
+| `init`    | function               | Initialize a created agent for this invocation. See [`ctx.init(...)`](#ctxinit) below.   |
 
 ### `ctx.req`
 
@@ -308,7 +309,7 @@ Emits observable structured log events with optional structured attributes. Log 
 
 ### `ctx.init(...)`
 
-`ctx.init()` initializes a harness from an `AgentRuntimeConfig` for one workflow invocation. Each harness name may be initialized once per context. The default harness name is `'default'`.
+`ctx.init()` initializes a created agent for one workflow invocation. Each harness name may be initialized once per context. The default harness name is `'default'`.
 
 #### `AgentHarnessOptions`
 
@@ -321,7 +322,7 @@ Emits observable structured log events with optional structured attributes. Log 
 
 ## Agent
 
-An addressable agent is the value returned by `createAgent()` and default-exported from `agents/<name>.ts`. Workflows instead pass an `AgentRuntimeConfig` directly to `ctx.init()`.
+A created agent is the value returned by `createAgent()`. Addressable agents are default-exported from `agents/<name>.ts`. Workflows initialize a created agent with `ctx.init()`.
 
 ## Harness
 

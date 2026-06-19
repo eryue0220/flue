@@ -1,4 +1,4 @@
-import type { FlueContext, WorkflowRouteHandler } from '@flue/runtime';
+import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 import { Bash, InMemoryFs } from 'just-bash';
 
 export const route: WorkflowRouteHandler = async (_c, next) => next();
@@ -11,7 +11,8 @@ export const route: WorkflowRouteHandler = async (_c, next) => next();
 export async function run({ init }: FlueContext) {
 	const fs = new InMemoryFs();
 	const sandbox = () => new Bash({ fs });
-	const harness = await init({ sandbox, model: 'anthropic/claude-haiku-4-5' });
+	const agent = createAgent(() => ({ sandbox, model: 'anthropic/claude-haiku-4-5' }));
+	const harness = await init(agent);
 	const session = await harness.session();
 
 	const results: Record<string, boolean> = {};

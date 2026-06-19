@@ -11,13 +11,15 @@ Workflows are useful when your application needs an agent to complete a single u
 In a Flue project, a workflow is a file in `src/workflows/` that exports a `run(...)` function. The filename gives the workflow its name: `src/workflows/summarize.ts` defines the `summarize` workflow.
 
 ```ts title="src/workflows/summarize.ts"
-import type { FlueContext } from '@flue/runtime';
+import { createAgent, type FlueContext } from '@flue/runtime';
+
+const summarizer = createAgent(() => ({
+  model: 'anthropic/claude-haiku-4-5',
+  instructions: 'Summarize the supplied document clearly and concisely.',
+}));
 
 export async function run({ init, payload }: FlueContext<{ text: string }>) {
-  const harness = await init({
-    model: 'anthropic/claude-haiku-4-5',
-    instructions: 'Summarize the supplied document clearly and concisely.',
-  });
+  const harness = await init(summarizer);
   const session = await harness.session();
   const response = await session.prompt(payload.text);
 
@@ -28,14 +30,15 @@ export async function run({ init, payload }: FlueContext<{ text: string }>) {
 In this example:
 
 - **The filename:** This gives the workflow its name: `summarize`.
+- `createAgent(...)`: This defines the agent used to perform the work.
 - `run(...)`: This is the unit of work Flue runs for each invocation. It receives the workflow's [`FlueContext`](/docs/api/agent-api/#fluecontext), which also carries `id`, `env`, `req`, and `log`.
-- `init({ ... })`: This initializes a harness from an [`AgentRuntimeConfig`](/docs/api/agent-api/#agentruntimeconfig) for this workflow invocation.
+- `init(summarizer)`: This initializes the created agent for this workflow invocation and returns its harness.
 - `harness.session()`: This opens the default session used for the operation.
 - **The return value:** This becomes the completed workflow result.
 
-A workflow can contain ordinary TypeScript logic before, between, or after agent operations: load application data, branch on input, log progress, or transform a response before returning it. Pass the model, instructions, tools, skills, and sandbox directly to `ctx.init(...)`.
+A workflow can contain ordinary TypeScript logic before, between, or after agent operations: load application data, branch on input, log progress, or transform a response before returning it. Configure the agent's model, instructions, tools, skills, and sandbox through `createAgent(...)`, as you would for an addressable agent.
 
-Prefer `ctx.init(AgentRuntimeConfig)` and `session.prompt(...)` for model-backed work inside a workflow, even when the workflow only makes one model call. Calling a provider binding or SDK directly bypasses Flue's model resolution, tools, skills, sandbox configuration, operation events, and response handling.
+Prefer `init(agent)` and `session.prompt(...)` for model-backed work inside a workflow, even when the workflow only makes one model call. Calling a provider binding or SDK directly bypasses Flue's model resolution, tools, skills, sandbox configuration, operation events, and response handling.
 
 See [Project Layout](/docs/guide/project-layout/) for supported source layouts, [Models & Providers](/docs/guide/models/) for model configuration, and [Agents](/docs/guide/building-agents/) for agent configuration concepts.
 
@@ -71,20 +74,22 @@ Application-owned routes, Worker handlers, and other workflows should use the sa
 
 ## Working with the harness
 
-`ctx.init(AgentRuntimeConfig)` returns a harness: the initialized environment your workflow uses for agent work. Through the harness, application code can prepare the agent's workspace and open sessions where the agent performs work.
+`init(agent)` returns a harness: the initialized environment your workflow uses for that agent. Through the harness, application code can prepare the agent's workspace and open sessions where the agent performs work.
 
 ### Files and commands
 
 A workflow can provide files for an agent to work on and collect the generated artifact after it finishes:
 
 ```ts title="src/workflows/review-document.ts"
-import type { FlueContext } from '@flue/runtime';
+import { createAgent, type FlueContext } from '@flue/runtime';
+
+const reviewer = createAgent(() => ({
+  model: 'anthropic/claude-sonnet-4-6',
+  cwd: '/workspace',
+}));
 
 export async function run({ init, payload }: FlueContext<{ document: string }>) {
-  const harness = await init({
-    model: 'anthropic/claude-sonnet-4-6',
-    cwd: '/workspace',
-  });
+  const harness = await init(reviewer);
   await harness.fs.writeFile('document.md', payload.document);
 
   const session = await harness.session();
@@ -103,10 +108,14 @@ The workspace available to a harness is determined by the agent's sandbox config
 A session is where the agent's work accumulates context. Use the default session when a later instruction should continue from earlier work:
 
 ```ts title="src/workflows/investigate-incident.ts"
-import type { FlueContext } from '@flue/runtime';
+import { createAgent, type FlueContext } from '@flue/runtime';
+
+const investigator = createAgent(() => ({
+  model: 'anthropic/claude-sonnet-4-6',
+}));
 
 export async function run({ init, payload }: FlueContext<{ incident: string }>) {
-  const harness = await init({ model: 'anthropic/claude-sonnet-4-6' });
+  const harness = await init(investigator);
   const session = await harness.session();
 
   await session.prompt(`Analyze this incident:\n\n${payload.incident}`);
@@ -123,11 +132,15 @@ In addition to prompting, a session can run an available skill, delegate a task 
 When a workflow needs dependable application data rather than prose, provide a schema for the result. The agent must return data that satisfies the schema before the workflow receives it:
 
 ```ts title="src/workflows/classify-ticket.ts"
-import type { FlueContext } from '@flue/runtime';
+import { createAgent, type FlueContext } from '@flue/runtime';
 import * as v from 'valibot';
 
+const triage = createAgent(() => ({
+  model: 'anthropic/claude-sonnet-4-6',
+}));
+
 export async function run({ init, payload }: FlueContext<{ ticket: string }>) {
-  const harness = await init({ model: 'anthropic/claude-sonnet-4-6' });
+  const harness = await init(triage);
   const session = await harness.session();
   const response = await session.prompt(payload.ticket, {
     result: v.object({

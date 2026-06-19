@@ -1,4 +1,5 @@
 import {
+	createAgent,
 	defineAgentProfile,
 	type FlueContext,
 	type WorkflowRouteHandler,
@@ -12,8 +13,10 @@ const greeter = defineAgentProfile({
 	instructions: 'Write one warm, concise greeting.',
 });
 
+const agent = createAgent(() => ({ model: 'anthropic/claude-sonnet-4-6', subagents: [greeter] }));
+
 export async function run({ init, payload }: FlueContext<{ name?: string }>) {
-	const harness = await init({ model: 'anthropic/claude-sonnet-4-6', subagents: [greeter] });
+	const harness = await init(agent);
 	const session = await harness.session();
 
 	const { data } = await session.task(`Greet the user named "${payload.name ?? 'Developer'}".`, {

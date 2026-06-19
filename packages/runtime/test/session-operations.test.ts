@@ -9,6 +9,7 @@ import {
 import * as v from 'valibot';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+	createAgent,
 	defineAgentProfile,
 	defineTool,
 	ModelNotConfiguredError,
@@ -88,7 +89,7 @@ describe('session.prompt()', () => {
 		]);
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -108,7 +109,7 @@ describe('session.prompt()', () => {
 		provider.setResponses([fauxAssistantMessage('Should not be requested.')]);
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -122,7 +123,7 @@ describe('session.prompt()', () => {
 		provider.setResponses([fauxAssistantMessage('Reviewed workspace.')]);
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -169,7 +170,7 @@ describe('session.prompt()', () => {
 		provider.setResponses([fauxAssistantMessage('Should not be requested.')]);
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -200,7 +201,7 @@ describe('session.prompt()', () => {
 			events.push(event);
 		});
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -258,7 +259,7 @@ describe('session.prompt()', () => {
 			if (event.type === 'idle') events.push('idle');
 		});
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -272,7 +273,7 @@ describe('session.prompt()', () => {
 		provider.setResponses([fauxAssistantMessage('Reviewed workspace.')]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -322,7 +323,7 @@ describe('session.prompt()', () => {
 				events.push(event);
 			});
 			const harness = await ctx.init(
-				{ model: `${provider.getModel().provider}/reviewer` },
+				createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 			);
 			const session = await harness.session();
 
@@ -365,7 +366,7 @@ describe('session.prompt()', () => {
 			);
 			const ctx = createContext(provider);
 			const harness = await ctx.init(
-				{ model: `${provider.getModel().provider}/reviewer` },
+				createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 			);
 			const session = await harness.session();
 
@@ -408,10 +409,10 @@ describe('session.prompt()', () => {
 			});
 			const ctx = createContext(provider);
 			const harness = await ctx.init(
-				{
+				createAgent(() => ({
 					model: `${provider.getModel().provider}/reviewer`,
 					tools: [lookup],
-				},
+				})),
 			);
 			const session = await harness.session();
 
@@ -434,7 +435,7 @@ describe('session.prompt()', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -456,7 +457,7 @@ describe('session.prompt()', () => {
 		const store = new RecordingSessionStore();
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 		await expect(session.prompt('First attempt.')).rejects.toThrow('invalid_api_key');
@@ -540,7 +541,7 @@ describe('session.prompt()', () => {
 		});
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -574,7 +575,7 @@ describe('session.prompt()', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/default-model` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/default-model` })),
 		);
 		const session = await harness.session();
 
@@ -592,7 +593,7 @@ describe('session.prompt()', () => {
 	it('rejects a model operation when neither the agent nor the call configures a model', async () => {
 		const provider = createProvider();
 		const ctx = createContext(provider);
-		const harness = await ctx.init({ model: false });
+		const harness = await ctx.init(createAgent(() => ({ model: false })));
 		const session = await harness.session();
 
 		await expect(session.prompt('Review this workspace.')).rejects.toThrow(ModelNotConfiguredError);
@@ -609,10 +610,10 @@ describe('session.prompt()', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{
+			createAgent(() => ({
 				model: `${provider.getModel().provider}/reasoner`,
 				thinkingLevel: 'low',
-			},
+			})),
 		);
 		const session = await harness.session();
 
@@ -640,7 +641,7 @@ describe('session.prompt()', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -679,7 +680,7 @@ describe('session.task()', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 		await session.prompt('Remember parent-only context.');
@@ -725,7 +726,7 @@ describe('session.task()', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -771,7 +772,7 @@ describe('session.task()', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -799,7 +800,7 @@ describe('session.task()', () => {
 		const store = new RecordingSessionStore();
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -852,10 +853,10 @@ describe('session.task()', () => {
 		const store = new RecordingSessionStore();
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{
+			createAgent(() => ({
 				model: `${provider.getModel().provider}/reviewer`,
 				compaction: { keepRecentTokens: 1 },
-			},
+			})),
 		);
 		const session = await harness.session();
 		await session.prompt('Store this image.', {
@@ -913,15 +914,15 @@ describe('session.task()', () => {
 			fauxAssistantMessage('Delegation complete.'),
 		]);
 		const store = new RecordingSessionStore();
-		const runtimeConfig = { model: `${provider.getModel().provider}/reviewer` };
+		const agent = createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` }));
 		const firstContext = createContext(provider, { store });
-		const firstHarness = await firstContext.init(runtimeConfig);
+		const firstHarness = await firstContext.init(agent);
 		const firstSession = await firstHarness.session();
 		await firstSession.prompt('Store this image.', {
 			images: [{ type: 'image', data: 'aGVsbG8=', mimeType: 'image/png' }],
 		});
 		const secondContext = createContext(provider, { store });
-		const secondHarness = await secondContext.init(runtimeConfig);
+		const secondHarness = await secondContext.init(agent);
 		const secondSession = await secondHarness.session();
 
 		const response = await secondSession.prompt('Delegate the stored image.');
@@ -940,7 +941,7 @@ describe('session.task()', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{
+			createAgent(() => ({
 				model: `${provider.getModel().provider}/parent-model`,
 				subagents: [
 					defineAgentProfile({
@@ -949,7 +950,7 @@ describe('session.task()', () => {
 						instructions: 'Review code changes only.',
 					}),
 				],
-			},
+			})),
 		);
 		const session = await harness.session();
 
@@ -973,7 +974,7 @@ describe('session.task()', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{
+			createAgent(() => ({
 				model: `${provider.getModel().provider}/reviewer`,
 				tools: [
 					defineTool({
@@ -990,7 +991,7 @@ describe('session.task()', () => {
 						instructions: 'Summarize the supplied text in one line.',
 					}),
 				],
-			},
+			})),
 		);
 		const session = await harness.session();
 
@@ -1006,10 +1007,10 @@ describe('session.task()', () => {
 		const provider = createProvider([{ id: 'reviewer' }]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{
+			createAgent(() => ({
 				model: `${provider.getModel().provider}/reviewer`,
 				subagents: [defineAgentProfile({ name: 'declared-reviewer', model: false })],
-			},
+			})),
 		);
 		const session = await harness.session();
 
@@ -1030,7 +1031,7 @@ describe('session.task()', () => {
 		]);
 		const ctx = createContext(provider, { env: createNoopSessionEnv({ cwd: '/repo' }) });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1053,7 +1054,7 @@ describe('session.task()', () => {
 		const store = new RecordingSessionStore();
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1092,7 +1093,7 @@ describe('session.task()', () => {
 		};
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1118,7 +1119,7 @@ describe('session.task()', () => {
 		const store = new RecordingSessionStore();
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1140,7 +1141,7 @@ describe('session.task()', () => {
 		const store = new RecordingSessionStore();
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1158,7 +1159,7 @@ describe('session.task()', () => {
 		const store = new RecordingSessionStore();
 		const ctx = createContext(provider, { store });
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1214,7 +1215,7 @@ describe('session.task()', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1245,7 +1246,7 @@ describe('CallHandle', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1266,7 +1267,7 @@ describe('CallHandle', () => {
 			]);
 			const ctx = createContext(provider);
 			const harness = await ctx.init(
-				{ model: `${provider.getModel().provider}/reviewer` },
+				createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 			);
 			const session = await harness.session();
 
@@ -1303,7 +1304,7 @@ describe('CallHandle', () => {
 		const controller = new AbortController();
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1330,7 +1331,7 @@ describe('CallHandle', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1364,7 +1365,7 @@ describe('CallHandle', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 
@@ -1394,7 +1395,7 @@ describe('CallHandle', () => {
 		]);
 		const ctx = createContext(provider);
 		const harness = await ctx.init(
-			{ model: `${provider.getModel().provider}/reviewer` },
+			createAgent(() => ({ model: `${provider.getModel().provider}/reviewer` })),
 		);
 		const session = await harness.session();
 		const unhandled: unknown[] = [];

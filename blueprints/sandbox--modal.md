@@ -66,7 +66,8 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
  * const image = client.images.fromRegistry('python:3.13-slim');
  * const sandbox = await client.sandboxes.create(app, image);
  *
- * const harness = await ctx.init({ sandbox: modal(sandbox), model: 'anthropic/claude-sonnet-4-6' });
+ * const agent = createAgent(() => ({ sandbox: modal(sandbox), model: 'anthropic/claude-sonnet-4-6' }));
+ * const harness = await init(agent);
  * const session = await harness.session();
  * ```
  */
@@ -326,7 +327,7 @@ into, you can finish that work by wiring the adapter into it. Otherwise,
 share this snippet so they can wire it up themselves.
 
 ```ts
-import type { FlueContext, WorkflowRouteHandler } from '@flue/runtime';
+import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 import { ModalClient } from 'modal';
 import { modal } from '../sandboxes/modal'; // adjust path to match the user's layout
 
@@ -340,10 +341,11 @@ export async function run ({ init }: FlueContext) {
   const image = client.images.fromRegistry('python:3.13-slim');
   const sandbox = await client.sandboxes.create(app, image);
 
-  const harness = await init({
+  const agent = createAgent(() => ({
     sandbox: modal(sandbox),
     model: 'anthropic/claude-sonnet-4-6',
-  });
+  }));
+  const harness = await init(agent);
   const session = await harness.session();
 
   return await session.shell('uname -a');

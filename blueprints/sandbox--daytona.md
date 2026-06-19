@@ -50,7 +50,8 @@ Write this file verbatim. Do not "improve" it — it conforms to the published
  *
  * const client = new Daytona({ apiKey: process.env.DAYTONA_API_KEY });
  * const sandbox = await client.create({ image: 'ubuntu:latest' });
- * const harness = await ctx.init({ sandbox: daytona(sandbox), model: 'anthropic/claude-sonnet-4-6' });
+ * const agent = createAgent(() => ({ sandbox: daytona(sandbox), model: 'anthropic/claude-sonnet-4-6' }));
+ * const harness = await init(agent);
  * const session = await harness.session();
  * ```
  */
@@ -198,7 +199,7 @@ into, you can finish that work by wiring the adapter into it. Otherwise,
 share this snippet so they can wire it up themselves.
 
 ```ts
-import type { FlueContext, WorkflowRouteHandler } from '@flue/runtime';
+import { createAgent, type FlueContext, type WorkflowRouteHandler } from '@flue/runtime';
 import { Daytona } from '@daytona/sdk';
 import { daytona } from '../sandboxes/daytona'; // adjust path to match the user's layout
 
@@ -208,10 +209,11 @@ export async function run ({ init, env }: FlueContext) {
   const client = new Daytona({ apiKey: env.DAYTONA_API_KEY });
   const sandbox = await client.create();
 
-  const harness = await init({
+  const agent = createAgent(() => ({
     sandbox: daytona(sandbox),
     model: 'anthropic/claude-sonnet-4-6',
-  });
+  }));
+  const harness = await init(agent);
   const session = await harness.session();
 
   return await session.shell('uname -a');
