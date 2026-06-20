@@ -25,6 +25,7 @@ import { generateSessionAffinityKey } from '../src/runtime/ids.ts';
 import { createSessionStorageKey } from '../src/session-identity.ts';
 import type { AgentConfig, SessionData } from '../src/types.ts';
 import { createNoopSessionEnv } from './fixtures/session-env.ts';
+import { agentRecord, nodeRuntime } from './helpers/runtime-config.ts';
 
 const providers: FauxProviderRegistration[] = [];
 
@@ -75,9 +76,9 @@ describe('dispatch()', () => {
 
 	it('returns an admission receipt when a named agent dispatch is accepted', async () => {
 		configureFlueRuntime({
-			target: 'node',
+			...nodeRuntime(),
 			dispatchQueue: noopDispatchQueue(),
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
+			agents: [agentRecord('moderator')],
 		});
 
 		const receipt = await dispatch({
@@ -96,15 +97,14 @@ describe('dispatch()', () => {
 		const moderator = defineAgent(() => ({ model: false }));
 		const admitted: DispatchInput[] = [];
 		configureFlueRuntime({
-			target: 'node',
+			...nodeRuntime(),
 			dispatchQueue: {
 				async enqueue(input) {
 					admitted.push(input);
 					return { dispatchId: input.dispatchId, acceptedAt: input.acceptedAt };
 				},
 			},
-			resolveDispatchAgentName: (candidate) => (candidate === moderator ? 'moderator' : undefined),
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
+			agents: [agentRecord('moderator', { definition: moderator })],
 		});
 
 		await dispatch(moderator, {
@@ -124,10 +124,9 @@ describe('dispatch()', () => {
 	it('rejects an agent definition target when the built application cannot resolve its identity', async () => {
 		const localModerator = defineAgent(() => ({ model: false }));
 		configureFlueRuntime({
-			target: 'node',
+			...nodeRuntime(),
 			dispatchQueue: noopDispatchQueue(),
-			resolveDispatchAgentName: () => undefined,
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
+			agents: [agentRecord('moderator')],
 		});
 
 		await expect(
@@ -142,14 +141,14 @@ describe('dispatch()', () => {
 		const admitted: DispatchInput[] = [];
 		const payload = { type: 'flagged', report: { id: 'report:snapshot', count: 1 } };
 		configureFlueRuntime({
-			target: 'node',
+			...nodeRuntime(),
 			dispatchQueue: {
 				async enqueue(input) {
 					admitted.push(input);
 					return { dispatchId: input.dispatchId, acceptedAt: input.acceptedAt };
 				},
 			},
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
+			agents: [agentRecord('moderator')],
 		});
 
 		await dispatch({ agent: 'moderator', id: 'guild:snapshot', input: payload });
@@ -163,9 +162,9 @@ describe('dispatch()', () => {
 
 	it('rejects missing input when dispatch() receives an undefined payload', async () => {
 		configureFlueRuntime({
-			target: 'node',
+			...nodeRuntime(),
 			dispatchQueue: noopDispatchQueue(),
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
+			agents: [agentRecord('moderator')],
 		});
 
 		await expect(
@@ -175,9 +174,9 @@ describe('dispatch()', () => {
 
 	it('rejects non-JSON-like input when dispatch() receives a function value', async () => {
 		configureFlueRuntime({
-			target: 'node',
+			...nodeRuntime(),
 			dispatchQueue: noopDispatchQueue(),
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
+			agents: [agentRecord('moderator')],
 		});
 
 		await expect(
@@ -191,9 +190,9 @@ describe('dispatch()', () => {
 
 	it('rejects non-JSON-like input when dispatch() receives a bigint value', async () => {
 		configureFlueRuntime({
-			target: 'node',
+			...nodeRuntime(),
 			dispatchQueue: noopDispatchQueue(),
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
+			agents: [agentRecord('moderator')],
 		});
 
 		await expect(
@@ -207,9 +206,9 @@ describe('dispatch()', () => {
 
 	it('rejects non-JSON-like input when dispatch() receives a non-plain object', async () => {
 		configureFlueRuntime({
-			target: 'node',
+			...nodeRuntime(),
 			dispatchQueue: noopDispatchQueue(),
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
+			agents: [agentRecord('moderator')],
 		});
 
 		await expect(
@@ -223,9 +222,9 @@ describe('dispatch()', () => {
 
 	it('rejects an unknown agent when dispatch() targets an unregistered name', async () => {
 		configureFlueRuntime({
-			target: 'node',
+			...nodeRuntime(),
 			dispatchQueue: noopDispatchQueue(),
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
+			agents: [agentRecord('moderator')],
 		});
 
 		await expect(
@@ -235,9 +234,9 @@ describe('dispatch()', () => {
 
 	it('rejects a blank agent instance id when dispatch() receives an id', async () => {
 		configureFlueRuntime({
-			target: 'node',
+			...nodeRuntime(),
 			dispatchQueue: noopDispatchQueue(),
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
+			agents: [agentRecord('moderator')],
 		});
 
 		await expect(
@@ -245,16 +244,6 @@ describe('dispatch()', () => {
 		).rejects.toThrow('requires a non-empty "id" target agent instance id');
 	});
 
-	it('rejects calls when the runtime has no dispatch queue', async () => {
-		configureFlueRuntime({
-			target: 'node',
-			manifest: { agents: [{ name: 'moderator', transports: {}, defined: true }] },
-		});
-
-		await expect(
-			dispatch({ agent: 'moderator', id: 'guild:no-queue', input: { type: 'flagged' } }),
-		).rejects.toThrow('no dispatch queue is configured');
-	});
 });
 
 describe('dispatched session processing', () => {

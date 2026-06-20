@@ -233,8 +233,7 @@ ${workflowModuleEntries}
 const channelModules = {
 ${channelModuleEntries}
 };
-const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);
-const { manifest, agentDefinitions, dispatchAgentNames, workflows, workflowNames, agentRouteMiddleware, workflowRouteMiddleware, channelHandlers } = normalized;
+const { agents, workflows, channelHandlers } = normalizeBuiltModules(agentModules, workflowModules, channelModules);
 const agentIdentities = {
 ${agentIdentityEntries}
 };
@@ -288,25 +287,11 @@ const dispatchQueue = {
   },
 };
 
-function createContextForRequest(id, runId, doInstance, req, defaultStore, initialEventIndex, dispatchId) {
+function createAgentContextForRequest({ executionStore, instance, request, initialEventIndex, dispatchId }) {
   return createFlueContext({
-    id,
-    runId,
-    dispatchId,
-    env: doInstance?.env ?? {},
-    req,
-    initialEventIndex,
-    agentConfig: { packagedSkills, resolveModel },
-    createDefaultEnv,
-    defaultStore,
-  });
-}
-
-function createAgentContextForRequest(executionStore, id, doInstance, req, initialEventIndex, dispatchId) {
-  return createFlueContext({
-    id,
-    env: doInstance?.env ?? {},
-    req,
+    id: instance.name,
+    env: instance?.env ?? {},
+    req: request,
     initialEventIndex,
     dispatchId,
     agentConfig: { packagedSkills, resolveModel },
@@ -316,9 +301,17 @@ function createAgentContextForRequest(executionStore, id, doInstance, req, initi
   });
 }
 
-function createWorkflowContextForRequest(id, runId, doInstance, req, initialEventIndex, dispatchId) {
-  const defaultStore = createSqlSessionStore(doInstance.ctx.storage);
-  return createContextForRequest(id, runId, doInstance, req, defaultStore, initialEventIndex, dispatchId);
+function createWorkflowContextForRequest({ runId, request, initialEventIndex }, doInstance) {
+  return createFlueContext({
+    id: runId,
+    runId,
+    env: doInstance?.env ?? {},
+    req: request,
+    initialEventIndex,
+    agentConfig: { packagedSkills, resolveModel },
+    createDefaultEnv,
+    defaultStore: createSqlSessionStore(doInstance.ctx.storage),
+  });
 }
 
 function createRunStoreForRequest(doInstance) {
@@ -376,9 +369,8 @@ function createEventStreamStoreForInstance(doInstance) {
 }
 
 const cloudflareAgents = createCloudflareAgentRuntime({
-  agentDefinitions,
-  createContext: ({ executionStore, instance, request, initialEventIndex, dispatchId }) =>
-    createAgentContextForRequest(executionStore, instance.name, instance, request, initialEventIndex, dispatchId),
+  agents,
+  createContext: createAgentContextForRequest,
   runWithInstanceContext: (instance, agentName, fn) => runWithInstanceContext(instance, agentRuntimeIdentity(agentName), fn),
   createEventStreamStore: (instance) => createEventStreamStoreForInstance(instance),
 });
@@ -399,13 +391,12 @@ async function handleFlueWorkflowFiberRecovered(ctx, doInstance, workflowName) {
   const runStore = createRunStoreForRequest(doInstance);
   await failRecoveredRun({
     workflowName,
-    id: interruptedRunId,
     runId: interruptedRunId,
     request: new Request('https://flue.invalid/workflows/' + encodeURIComponent(workflowName), { method: 'POST' }),
     error: new Error('Flue workflow execution was interrupted. Start a new workflow run explicitly if retry is appropriate.'),
     runStore,
     eventStreamStore: createEventStreamStoreForInstance(doInstance),
-    createContext: (id_, recoveredRunId, req, initialEventIndex) => createWorkflowContextForRequest(id_, recoveredRunId, doInstance, req, initialEventIndex),
+    createContext: (options) => createWorkflowContextForRequest(options, doInstance),
   });
 }
 
@@ -432,7 +423,7 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
     });
   }
 
-  const workflow = workflows[workflowName];
+  const workflow = workflows.find((record) => record.name === workflowName)?.definition;
   if (!workflow) return null;
   const identity = workflowRuntimeIdentity(workflowName);
   if (request.method === 'POST' && new URL(request.url).pathname === INTERNAL_WORKFLOW_INVOKE_PATH) {
@@ -446,7 +437,7 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
         request,
         runStore: createRunStoreForRequest(doInstance),
         eventStreamStore: createEventStreamStoreForInstance(doInstance),
-        createContext: (id_, runId, req, initialEventIndex, dispatchId) => createWorkflowContextForRequest(id_, runId, doInstance, req, initialEventIndex, dispatchId),
+        createContext: (options) => createWorkflowContextForRequest(options, doInstance),
         startWorkflowAdmission: (runId, run) => {
           assertAgentsDurabilityApi(doInstance, 'runFiber');
           return doInstance.runFiber('flue:workflow:' + runId, () => runWithInstanceContext(doInstance, identity, run));
@@ -463,7 +454,7 @@ async function dispatchWorkflow(request, doInstance, workflowName) {
       workflow,
       runStore: createRunStoreForRequest(doInstance),
       eventStreamStore: createEventStreamStoreForInstance(doInstance),
-      createContext: (id_, runId, req, initialEventIndex, dispatchId) => createWorkflowContextForRequest(id_, runId, doInstance, req, initialEventIndex, dispatchId),
+      createContext: (options) => createWorkflowContextForRequest(options, doInstance),
       startWorkflowAdmission: (runId, run) => {
         assertAgentsDurabilityApi(doInstance, 'runFiber');
         return doInstance.runFiber('flue:workflow:' + runId, () => runWithInstanceContext(doInstance, identity, run));
@@ -521,10 +512,9 @@ configureFlueRuntime({
   target: 'cloudflare',
   devMode: import.meta.env.DEV,
   runtimeVersion: ${runtimeVersion},
-  manifest,
+  agents,
+  workflows,
   dispatchQueue,
-  resolveDispatchAgentName: (agent) => dispatchAgentNames.get(agent),
-  resolveWorkflowName: (workflow) => workflowNames.get(workflow),
   admitWorkflow: async ({ workflowName, input }) => {
     const identity = workflowIdentities[workflowName];
     const binding = env?.[identity?.bindingName];
@@ -538,8 +528,6 @@ configureFlueRuntime({
     if (!response.ok) throw new Error('[flue] invoke() target workflow rejected durable admission with status ' + response.status + '.');
     return response.json();
   },
-  agentRouteMiddleware,
-  workflowRouteMiddleware,
   channelHandlers,
   routeAgentRequest: async (request, reqEnv, target) => {
     const binding = reqEnv?.[agentIdentities[target.agentName]?.bindingName];

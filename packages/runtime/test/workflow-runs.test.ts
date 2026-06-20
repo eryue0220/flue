@@ -13,7 +13,7 @@ import {
 	WorkflowNotDiscoveredError,
 } from '../src/index.ts';
 import type { WorkflowInvokeRequest } from '../src/index.ts';
-import type { FlueContextInternal, FlueRuntime } from '../src/internal.ts';
+import type { FlueContextInternal } from '../src/internal.ts';
 import {
 	configureFlueRuntime,
 	createFlueContext,
@@ -26,23 +26,25 @@ import { flue } from '../src/routing.ts';
 import { formatOffset } from '../src/runtime/event-stream-store.ts';
 import { resetFlueRuntimeForTests } from '../src/runtime/flue-app.ts';
 import { createNoopSessionEnv } from './fixtures/session-env.ts';
+import { nodeRuntime, workflowRecord } from './helpers/runtime-config.ts';
 import { createTestEventStreamStore } from './helpers/test-event-stream-store.ts';
 
 afterEach(() => {
 	resetFlueRuntimeForTests();
 });
 
-function createContext(
-	id: string,
-	runId: string | undefined,
-	request: Request,
-	initialEventIndex?: number,
-	dispatchId?: string,
-) {
+function createContext({
+	runId,
+	request,
+	initialEventIndex,
+}: {
+	runId: string;
+	request: Request;
+	initialEventIndex?: number;
+}) {
 	return createFlueContext({
-		id,
+		id: runId,
 		runId,
-		dispatchId,
 		req: request,
 		initialEventIndex,
 		env: {},
@@ -52,6 +54,10 @@ function createContext(
 		createDefaultEnv: async () => createNoopSessionEnv(),
 		defaultStore: new InMemorySessionStore(),
 	});
+}
+
+function httpWorkflowRecord(name: string, definition: import('../src/internal.ts').WorkflowRecord['definition']) {
+	return workflowRecord(name, definition, { route: async (_c, next) => next() });
 }
 
 function workflow(run: (input: unknown) => any) {
@@ -64,8 +70,8 @@ function workflow(run: (input: unknown) => any) {
 	});
 }
 
-function createApp(runtime: FlueRuntime): Hono {
-	configureFlueRuntime({ eventStreamStore: createTestEventStreamStore(), ...runtime });
+function createApp(runtime: Partial<import('../src/internal.ts').NodeRuntime>): Hono {
+	configureFlueRuntime(nodeRuntime({ eventStreamStore: createTestEventStreamStore(), ...runtime }));
 	const app = new Hono();
 	app.route('/flue', flue());
 	return app;
@@ -94,11 +100,11 @@ describe('invoke()', () => {
 			run: async () => undefined,
 		});
 		const admitWorkflow = vi.fn(async () => ({ runId: 'run_no_input' }));
-		configureFlueRuntime({
+		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			resolveWorkflowName: () => 'target',
+			workflows: [httpWorkflowRecord('target', target)],
 			admitWorkflow,
-		});
+		}));
 
 		await expect(invoke(target, { input: {} } as never)).rejects.toBeInstanceOf(
 			WorkflowInputUnexpectedError,
@@ -117,11 +123,11 @@ describe('invoke()', () => {
 	it('rejects Workflow Definitions that are not exact discovered identities', async () => {
 		const discovered = workflow(async () => undefined);
 		const undiscovered = workflow(async () => undefined);
-		configureFlueRuntime({
+		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			resolveWorkflowName: (candidate) => (candidate === discovered ? 'discovered' : undefined),
+			workflows: [httpWorkflowRecord('discovered', discovered)],
 			admitWorkflow: async () => ({ runId: 'run_discovered' }),
-		});
+		}));
 
 		await expect(invoke(undiscovered, { input: {} })).rejects.toBeInstanceOf(
 			WorkflowNotDiscoveredError,
@@ -132,14 +138,14 @@ describe('invoke()', () => {
 		const target = workflow(async () => undefined);
 		const admitted: unknown[] = [];
 		const input = { nested: { count: 1 } };
-		configureFlueRuntime({
+		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			resolveWorkflowName: (candidate) => (candidate === target ? 'target' : undefined),
+			workflows: [httpWorkflowRecord('target', target)],
 			admitWorkflow: async (admission) => {
 				admitted.push(admission.input);
 				return { runId: 'run_snapshot' };
 			},
-		});
+		}));
 
 		await invoke(target, { input });
 		input.nested.count = 2;
@@ -152,13 +158,13 @@ describe('invoke()', () => {
 
 	it('wraps target admission failures in a structured public error', async () => {
 		const target = workflow(async () => undefined);
-		configureFlueRuntime({
+		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			resolveWorkflowName: () => 'target',
+			workflows: [httpWorkflowRecord('target', target)],
 			admitWorkflow: async () => {
 				throw new Error('storage unavailable');
 			},
-		});
+		}));
 
 		await expect(invoke(target, { input: {} })).rejects.toBeInstanceOf(WorkflowAdmissionError);
 	});
@@ -174,9 +180,9 @@ describe('invoke()', () => {
 		});
 		const runStore = new InMemoryRunStore();
 		const eventStreamStore = createTestEventStreamStore();
-		configureFlueRuntime({
+		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			resolveWorkflowName: (candidate) => (candidate === target ? 'target' : undefined),
+			workflows: [httpWorkflowRecord('target', target)],
 			admitWorkflow: ({ workflowName, input }) =>
 				admitDetachedWorkflow({
 					workflowName,
@@ -187,7 +193,7 @@ describe('invoke()', () => {
 					runStore,
 					eventStreamStore,
 				}),
-		});
+		}));
 
 		const receipt = await invoke(target, { input: { report: 'weekly' } });
 		expect(await runStore.getRun(receipt.runId)).toMatchObject({
@@ -262,9 +268,9 @@ describe('invoke()', () => {
 		});
 		const runStore = new InMemoryRunStore();
 		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-		configureFlueRuntime({
+		configureFlueRuntime(nodeRuntime({
 			target: 'node',
-			resolveWorkflowName: () => 'target',
+			workflows: [httpWorkflowRecord('target', target)],
 			admitWorkflow: ({ workflowName, input }) =>
 				admitDetachedWorkflow({
 					workflowName,
@@ -275,7 +281,7 @@ describe('invoke()', () => {
 					runStore,
 					eventStreamStore: createTestEventStreamStore(),
 				}),
-		});
+		}));
 
 		try {
 			const receipt = await invoke(target, { input: {} });
@@ -298,14 +304,12 @@ describe('workflow invocation', () => {
 		const runStore = new InMemoryRunStore();
 		const app = createApp({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
-			workflows: {
-				'daily-report': workflow(async () => {
+
+			workflows: [httpWorkflowRecord('daily-report', workflow(async () => {
 					await completionGate;
 					return { delivered: true };
-				}),
-			},
-			createContext,
+				}))],
+			createWorkflowContext: createContext,
 			runStore,
 		});
 
@@ -341,11 +345,9 @@ describe('workflow invocation', () => {
 	it('returns a flat synchronous result envelope when a workflow request uses wait result mode', async () => {
 		const app = createApp({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
-			workflows: {
-				'daily-report': workflow(async () => ({ delivered: true })),
-			},
-			createContext,
+
+			workflows: [httpWorkflowRecord('daily-report', workflow(async () => ({ delivered: true })))],
+			createWorkflowContext: createContext,
 			runStore: new InMemoryRunStore(),
 		});
 
@@ -374,13 +376,12 @@ describe('workflow invocation', () => {
 		let executions = 0;
 		const app = createApp({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
-			workflows: {
-				'daily-report': workflow(async () => {
+
+			workflows: [httpWorkflowRecord('daily-report', workflow(async () => {
 					executions++;
-				}),
-			},
-			createContext,
+				}))],
+			createWorkflowContext: createContext,
+			runStore: undefined,
 		});
 
 		const response = await app.fetch(
@@ -406,16 +407,11 @@ describe('workflow invocation', () => {
 		try {
 			const app = createApp({
 				target: 'node',
-				manifest: {
-					agents: [],
-					workflows: [{ name: 'daily-report', transports: { http: true } }],
-				},
-				workflows: {
-					'daily-report': workflow(async () => {
+
+				workflows: [httpWorkflowRecord('daily-report', workflow(async () => {
 						executions++;
-					}),
-				},
-				createContext,
+					}))],
+				createWorkflowContext: createContext,
 				runStore,
 			});
 
@@ -441,12 +437,10 @@ describe('workflow invocation', () => {
 		const middleware = vi.fn(async (_c, next) => next());
 		const app = createApp({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
-			workflows: {
-				'daily-report': workflow(async (input) => ({ input })),
-			},
-			workflowRouteMiddleware: { 'daily-report': middleware },
-			createContext,
+
+			workflows: [workflowRecord('daily-report', workflow(async (input) => ({ input })), { route: middleware })],
+
+			createWorkflowContext: createContext,
 			runStore: new InMemoryRunStore(),
 		});
 
@@ -473,11 +467,11 @@ describe('workflow invocation', () => {
 		});
 		const app = createApp({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'validated', transports: { http: true } }] },
-			workflows: { validated: invalidWorkflow },
-			createContext(id, runId, request) {
+
+			workflows: [httpWorkflowRecord('validated', invalidWorkflow)],
+			createWorkflowContext({ runId, request }) {
 				return createFlueContext({
-					id,
+					id: runId,
 					runId,
 					req: request,
 					env: {},
@@ -511,11 +505,11 @@ describe('workflow invocation', () => {
 		});
 		const app = createApp({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'no-input', transports: { http: true } }] },
-			workflows: { 'no-input': noInputWorkflow },
-			createContext(id, runId, request) {
+
+			workflows: [httpWorkflowRecord('no-input', noInputWorkflow)],
+			createWorkflowContext({ runId, request }) {
 				return createFlueContext({
-					id,
+					id: runId,
 					runId,
 					req: request,
 					env: {},
@@ -545,11 +539,9 @@ describe('workflow invocation', () => {
 		const runStore = new InMemoryRunStore();
 		const app = createApp({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'daily-report', transports: { http: true } }] },
-			workflows: {
-				'daily-report': workflow(async () => undefined),
-			},
-			createContext,
+
+			workflows: [httpWorkflowRecord('daily-report', workflow(async () => undefined))],
+			createWorkflowContext: createContext,
 			runStore,
 		});
 
@@ -609,11 +601,11 @@ describe('workflow run lifecycle', () => {
 		});
 		const app = createApp({
 			target: 'node',
-			manifest: { agents: [], workflows: [{ name: 'cleanup', transports: { http: true } }] },
-			workflows: { cleanup: createdWorkflow },
-			createContext(id, runId, request) {
+
+			workflows: [httpWorkflowRecord('cleanup', createdWorkflow)],
+			createWorkflowContext({ runId, request }) {
 				return createFlueContext({
-					id,
+					id: runId,
 					runId,
 					req: request,
 					env: {},
@@ -681,16 +673,11 @@ describe('workflow run lifecycle', () => {
 		try {
 			const app = createApp({
 				target: 'node',
-				manifest: {
-					agents: [],
-					workflows: [{ name: 'daily-report', transports: { http: true } }],
-				},
-				workflows: {
-					'daily-report': workflow(async () => {
+
+				workflows: [httpWorkflowRecord('daily-report', workflow(async () => {
 						throw new Error('report generation failed');
-					}),
-				},
-				createContext,
+					}))],
+				createWorkflowContext: createContext,
 				runStore,
 			});
 
@@ -733,16 +720,11 @@ describe('workflow run lifecycle', () => {
 		try {
 			const app = createApp({
 				target: 'node',
-				manifest: {
-					agents: [],
-					workflows: [{ name: 'daily-report', transports: { http: true } }],
-				},
-				workflows: {
-					'daily-report': workflow(async () => {
+
+				workflows: [httpWorkflowRecord('daily-report', workflow(async () => {
 						throw new Error('report generation failed');
-					}),
-				},
-				createContext,
+					}))],
+				createWorkflowContext: createContext,
 				runStore,
 			});
 
@@ -795,7 +777,6 @@ describe('workflow run lifecycle', () => {
 
 		await failRecoveredRun({
 			workflowName: 'report',
-			id: runId,
 			runId,
 			request: new Request('http://localhost/recovery'),
 			createContext,
@@ -832,7 +813,6 @@ describe('workflow run lifecycle', () => {
 
 		await failRecoveredRun({
 			workflowName: 'report',
-			id: runId,
 			runId,
 			request: new Request('http://localhost/recovery'),
 			createContext,

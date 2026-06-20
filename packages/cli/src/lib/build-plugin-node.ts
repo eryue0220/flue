@@ -111,7 +111,7 @@ const channelModules = {
 ${channelModuleEntries}
 };
 const normalized = normalizeBuiltModules(agentModules, workflowModules, channelModules);
-const { manifest, agentDefinitions, dispatchAgentNames, workflows, workflowNames, agentRouteMiddleware, workflowRouteMiddleware, channelHandlers } = normalized;
+const { agents, workflows, channelHandlers } = normalized;
 
 const isLocalMode = process.env.FLUE_MODE === 'local';
 const localCliTarget = process.env.FLUE_CLI_TARGET;
@@ -182,29 +182,33 @@ const persistenceAdapter = ${dbEntry ? `userPersistenceAdapter` : `defaultAdapte
 const agentCoordinator = createNodeAgentCoordinator({
   submissions: executionStore.submissions,
   sessions: executionStore.sessions,
-  agents: agentDefinitions,
-  createContext: createContextForRequest,
+  agents,
+  createContext: createAgentContextForRequest,
   eventStreamStore,
 });
 const dispatchQueue = createNodeDispatchQueue(agentCoordinator);
 
-// Build per-agent durable admission factories so HTTP prompts enter
-// the same durable submission lifecycle as dispatches.
-const createAdmission = Object.fromEntries(
-  Object.keys(agentDefinitions).map((name) => [
-    name,
-    (instanceId) => agentCoordinator.createAdmission(name, instanceId),
-  ]),
-);
-
-function createContextForRequest(id, runId, req, initialEventIndex, dispatchId) {
+function createAgentContextForRequest({ id, request, initialEventIndex, dispatchId }) {
   return createFlueContext({
     id,
-    runId,
     dispatchId,
     initialEventIndex,
     env: process.env,
-    req,
+    req: request,
+    agentConfig: { packagedSkills, resolveModel },
+    createDefaultEnv,
+    defaultStore: executionStore.sessions,
+    submissionStore: executionStore.submissions,
+  });
+}
+
+function createWorkflowContextForRequest({ runId, request, initialEventIndex }) {
+  return createFlueContext({
+    id: runId,
+    runId,
+    initialEventIndex,
+    env: process.env,
+    req: request,
     agentConfig: { packagedSkills, resolveModel },
     createDefaultEnv,
     defaultStore: executionStore.sessions,
@@ -224,29 +228,26 @@ configureFlueRuntime({
   target: 'node',
   devMode: isLocalMode,
   runtimeVersion: ${runtimeVersion},
-  manifest,
-  createAdmission,
+  agents,
+  workflows,
+  createAgentAdmission: (agentName, instanceId) =>
+    agentCoordinator.createAdmission(agentName, instanceId),
   dispatchQueue,
-  resolveDispatchAgentName: (agent) => dispatchAgentNames.get(agent),
-  resolveWorkflowName: (workflow) => workflowNames.get(workflow),
   admitWorkflow: ({ workflowName, input }) => {
-    const workflow = workflows[workflowName];
+    const workflow = workflows.find((record) => record.name === workflowName)?.definition;
     if (!workflow) throw new Error('[flue] Internal workflow admission target is not registered.');
     return admitDetachedWorkflow({
       workflowName,
       workflow,
       input,
       request: new Request('https://flue.invalid/_internal/workflows/' + encodeURIComponent(workflowName), { method: 'POST' }),
-      createContext: createContextForRequest,
+      createContext: createWorkflowContextForRequest,
       runStore,
       eventStreamStore,
     });
   },
-  workflows,
-  agentRouteMiddleware,
-  workflowRouteMiddleware,
   channelHandlers,
-  createContext: createContextForRequest,
+  createWorkflowContext: createWorkflowContextForRequest,
   runStore,
   eventStreamStore,
 });
@@ -324,7 +325,7 @@ function ipcErrorMessage(error, requestId, runId) {
 }
 
 function startLocalWorkflow(name) {
-  const workflow = workflows[name];
+  const workflow = workflows.find((record) => record.name === name)?.definition;
   if (!workflow) {
     failLocalStartup('Unknown workflow: ' + name);
     return;
@@ -348,12 +349,11 @@ function startLocalWorkflow(name) {
     sendLocalMessage({ type: 'started', requestId: message.requestId, runId });
     void invokeWorkflowAttached({
       workflowName: name,
-      id: runId,
       runId,
       input: message.input,
       request: localRequest(),
       workflow,
-      createContext: createContextForRequest,
+      createContext: createWorkflowContextForRequest,
       onEvent: (event) => sendLocalMessage({ type: 'event', requestId: message.requestId, runId, event }),
       runStore,
       eventStreamStore,
@@ -369,7 +369,7 @@ function startLocalAgent(name, id) {
     failLocalStartup('Local agent connection requires an instance id.');
     return;
   }
-  if (!createAdmission[name]) {
+  if (!agents.some((agent) => agent.name === name)) {
     failLocalStartup('Unknown agent for admission: ' + name);
     return;
   }
@@ -385,7 +385,7 @@ function startLocalAgent(name, id) {
     let didStart = false;
     void invokeDirectAttached({
       payload: { message: message.message },
-      admitAttachedSubmission: createAdmission[name](id),
+      admitAttachedSubmission: agentCoordinator.createAdmission(name, id),
       onEvent: (event) => {
         if (!didStart) {
           didStart = true;

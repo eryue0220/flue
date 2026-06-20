@@ -6,12 +6,8 @@ type NormalizeBuiltModules = (
 	workflowModules: Record<string, Record<string, unknown>>,
 	channelModules?: Record<string, Record<string, unknown>>,
 ) => {
-	manifest: {
-		agents: Array<Record<string, unknown>>;
-		workflows: Array<Record<string, unknown>>;
-	};
-	workflows: Record<string, unknown>;
-	workflowNames: Map<unknown, string>;
+	agents: Array<Record<string, unknown>>;
+	workflows: Array<Record<string, unknown>>;
 	channelHandlers: Record<string, Record<string, (value: unknown) => unknown>>;
 };
 
@@ -51,25 +47,23 @@ function workflowModule(overrides: Record<string, unknown> = {}): Record<string,
 
 describe('normalizeBuiltModules()', () => {
 	it('collects the module-level description export into the agent manifest entry when present', () => {
-		const { manifest } = normalizeBuiltModules(
+		const { agents } = normalizeBuiltModules(
 			{ support: agentModule({ description: 'Resolves customer support tickets.' }) },
 			{},
 		);
 
-		expect(manifest.agents).toEqual([
-			{
+		expect(agents).toEqual([
+			expect.objectContaining({
 				name: 'support',
 				description: 'Resolves customer support tickets.',
-				transports: {},
-				defined: true,
-			},
+			}),
 		]);
 	});
 
 	it('omits description from the agent manifest entry when the module does not export one', () => {
-		const { manifest } = normalizeBuiltModules({ support: agentModule() }, {});
+		const { agents } = normalizeBuiltModules({ support: agentModule() }, {});
 
-		expect(manifest.agents).toEqual([{ name: 'support', transports: {}, defined: true }]);
+		expect(agents).toEqual([expect.objectContaining({ name: 'support' })]);
 	});
 
 	it('throws when an agent description export is not a string', () => {
@@ -90,9 +84,8 @@ describe('normalizeBuiltModules()', () => {
 
 		const normalized = normalizeBuiltModules({}, { report: module });
 
-		expect(normalized.workflows).toEqual({ report: module.default });
-		expect(normalized.manifest.workflows).toEqual([
-			{ name: 'report', transports: { http: true } },
+		expect(normalized.workflows).toEqual([
+			expect.objectContaining({ name: 'report', definition: module.default, route }),
 		]);
 	});
 
@@ -110,8 +103,9 @@ describe('normalizeBuiltModules()', () => {
 		const module = workflowModule();
 		const normalized = normalizeBuiltModules({}, { report: module });
 
-		expect(normalized.workflowNames.get(module.default)).toBe('report');
-		expect(normalized.workflowNames.get({ ...(module.default as object) })).toBeUndefined();
+		expect(normalized.workflows.find((record) => record.definition === module.default)?.name).toBe('report');
+		const clone = { ...(module.default as object) };
+		expect(normalized.workflows.find((record) => record.definition === clone)).toBeUndefined();
 	});
 
 	it('rejects legacy workflow run exports', () => {

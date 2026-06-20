@@ -21,7 +21,7 @@ import {
 } from '../src/node/agent-coordinator.ts';
 import { sqlite } from '../src/node/agent-execution-store.ts';
 import { agentStreamPath } from '../src/runtime/event-stream-store.ts';
-import type { CreateContextFn } from '../src/runtime/handle-agent.ts';
+import type { CreateAgentContextFn } from '../src/runtime/handle-agent.ts';
 import { generateSessionAffinityKey } from '../src/runtime/ids.ts';
 import { createSessionStorageKey } from '../src/session-identity.ts';
 import { defineTool } from '../src/tool.ts';
@@ -86,15 +86,14 @@ async function openExecutionStore(dbPath: string): Promise<AgentExecutionStore> 
 }
 
 /** Create a context factory that uses a real LLM model. */
-function makeRealCreateContext(executionStore: AgentExecutionStore): CreateContextFn {
+function makeRealCreateContext(executionStore: AgentExecutionStore): CreateAgentContextFn {
 	const model = resolveModel(REAL_MODEL);
-	return (id, runId, req, initialEventIndex, dispatchId) =>
+	return ({ id, request, initialEventIndex, dispatchId }) =>
 		createFlueContext({
 			id,
-			runId,
 			dispatchId,
 			env: {},
-			req,
+			req: request,
 			initialEventIndex,
 			agentConfig: {
 				subagents: {},
@@ -110,14 +109,13 @@ function makeRealCreateContext(executionStore: AgentExecutionStore): CreateConte
 function makeFauxCreateContext(
 	provider: FauxProviderRegistration,
 	executionStore: AgentExecutionStore,
-): CreateContextFn {
-	return (id, runId, req, initialEventIndex, dispatchId) =>
+): CreateAgentContextFn {
+	return ({ id, request, initialEventIndex, dispatchId }) =>
 		createFlueContext({
 			id,
-			runId,
 			dispatchId,
 			env: {},
-			req,
+			req: request,
 			initialEventIndex,
 			agentConfig: {
 				subagents: {},
@@ -149,7 +147,7 @@ async function createRealCoordinator(
 	const coordinator = createNodeAgentCoordinator({
 		submissions: executionStore.submissions,
 		sessions: executionStore.sessions,
-		agents: { assistant: agent },
+		agents: [{ name: 'assistant', definition: agent }],
 		createContext: makeRealCreateContext(executionStore),
 		eventStreamStore: createTestEventStreamStore(),
 	});
@@ -170,7 +168,7 @@ async function createFauxCoordinator(
 	const coordinator = createNodeAgentCoordinator({
 		submissions: executionStore.submissions,
 		sessions: executionStore.sessions,
-		agents: { assistant: agent },
+		agents: [{ name: 'assistant', definition: agent }],
 		createContext: makeFauxCreateContext(provider, executionStore),
 		eventStreamStore: createTestEventStreamStore(),
 	});
@@ -772,8 +770,7 @@ describe('NodeAgentCoordinator', () => {
 			const coordinator = createNodeAgentCoordinator({
 				submissions: executionStore.submissions,
 				sessions: executionStore.sessions,
-				agents: {
-					assistant: makeAgentWithSequentialTools(firstRunCounts, async (_id, _args, signal) => {
+				agents: [{ name: 'assistant', definition: makeAgentWithSequentialTools(firstRunCounts, async (_id, _args, signal) => {
 						bravoReachedResolve();
 						await new Promise<never>((_, reject) => {
 							if (signal?.aborted) reject(new Error('bravo aborted by shutdown'));
@@ -784,8 +781,7 @@ describe('NodeAgentCoordinator', () => {
 							);
 						});
 						throw new Error('unreachable');
-					}),
-				},
+					}) }],
 				createContext: makeFauxCreateContext(provider, executionStore),
 				eventStreamStore: createTestEventStreamStore(),
 			});
@@ -842,12 +838,10 @@ describe('NodeAgentCoordinator', () => {
 				const restarted = createNodeAgentCoordinator({
 					submissions: store2.submissions,
 					sessions: store2.sessions,
-					agents: {
-						assistant: makeAgentWithSequentialTools(restartCounts, async () => ({
+					agents: [{ name: 'assistant', definition: makeAgentWithSequentialTools(restartCounts, async () => ({
 							content: [{ type: 'text' as const, text: 'bravo result (rerun)' }],
 							details: {},
-						})),
-					},
+						})) }],
 					createContext: makeFauxCreateContext(provider, store2),
 					eventStreamStore: createTestEventStreamStore(),
 				});
@@ -1558,12 +1552,10 @@ describe('NodeAgentCoordinator', () => {
 			const coordinator = createNodeAgentCoordinator({
 				submissions: executionStore.submissions,
 				sessions: executionStore.sessions,
-				agents: {
-					assistant: defineAgent(() => ({
+				agents: [{ name: 'assistant', definition: defineAgent(() => ({
 						model: `${provider.getModel().provider}/${provider.getModel().id}`,
 						tools: [lookup],
-					})),
-				},
+					})) }],
 				createContext: makeFauxCreateContext(provider, executionStore),
 				eventStreamStore: createTestEventStreamStore(),
 			});
@@ -1618,12 +1610,10 @@ describe('NodeAgentCoordinator', () => {
 			const coordinator = createNodeAgentCoordinator({
 				submissions: executionStore.submissions,
 				sessions: executionStore.sessions,
-				agents: {
-					assistant: defineAgent(() => ({
+				agents: [{ name: 'assistant', definition: defineAgent(() => ({
 						model: `${provider.getModel().provider}/${provider.getModel().id}`,
 						tools: [lookup],
-					})),
-				},
+					})) }],
 				createContext: makeFauxCreateContext(provider, executionStore),
 				eventStreamStore: createTestEventStreamStore(),
 			});
@@ -1998,11 +1988,9 @@ describe('NodeAgentCoordinator', () => {
 			const coordinator = createNodeAgentCoordinator({
 				submissions: executionStore.submissions,
 				sessions: executionStore.sessions,
-				agents: {
-					assistant: defineAgent(() => ({
+				agents: [{ name: 'assistant', definition: defineAgent(() => ({
 						model: `${provider.getModel().provider}/${provider.getModel().id}`,
-					})),
-				},
+					})) }],
 				createContext: makeFauxCreateContext(provider, executionStore),
 				eventStreamStore,
 			});
@@ -2103,11 +2091,9 @@ describe('NodeAgentCoordinator', () => {
 			const coordinator = createNodeAgentCoordinator({
 				submissions: executionStore.submissions,
 				sessions: executionStore.sessions,
-				agents: {
-					assistant: defineAgent(() => ({
+				agents: [{ name: 'assistant', definition: defineAgent(() => ({
 						model: `${provider.getModel().provider}/${provider.getModel().id}`,
-					})),
-				},
+					})) }],
 				createContext: makeFauxCreateContext(provider, executionStore),
 				eventStreamStore,
 			});

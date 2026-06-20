@@ -3,6 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { InMemoryRunStore } from '../src/node/run-store.ts';
 import { configureFlueRuntime, resetFlueRuntimeForTests } from '../src/runtime/flue-app.ts';
 import { getRun, listAgents, listRuns } from '../src/runtime/inspect.ts';
+import {
+	cloudflareRuntime,
+	agentRecord,
+	nodeRuntime,
+} from './helpers/runtime-config.ts';
 
 afterEach(() => {
 	resetFlueRuntimeForTests();
@@ -24,7 +29,7 @@ describe('listRuns()', () => {
 			isError: false,
 			result: { delivered: true },
 		});
-		configureFlueRuntime({ target: 'node', manifest: { agents: [] }, runStore });
+		configureFlueRuntime({ ...nodeRuntime(), runStore });
 
 		await expect(listRuns()).resolves.toEqual({
 			runs: [
@@ -44,7 +49,7 @@ describe('listRuns()', () => {
 	it('forwards status, workflowName, limit, and cursor options to the run store', async () => {
 		const runStore = new InMemoryRunStore();
 		const listRunsSpy = vi.spyOn(runStore, 'listRuns');
-		configureFlueRuntime({ target: 'node', manifest: { agents: [] }, runStore });
+		configureFlueRuntime({ ...nodeRuntime(), runStore });
 
 		await listRuns({
 			status: 'errored',
@@ -75,7 +80,7 @@ describe('getRun()', () => {
 			startedAt: '2026-06-01T10:00:00.000Z',
 			input: { report: 'weekly' },
 		});
-		configureFlueRuntime({ target: 'node', manifest: { agents: [] }, runStore });
+		configureFlueRuntime({ ...nodeRuntime(), runStore });
 
 		await expect(getRun('run_01DAILYREPORT')).resolves.toEqual({
 			runId: 'run_01DAILYREPORT',
@@ -88,8 +93,7 @@ describe('getRun()', () => {
 
 	it('returns null when no run with the id is recorded', async () => {
 		configureFlueRuntime({
-			target: 'node',
-			manifest: { agents: [] },
+			...nodeRuntime(),
 			runStore: new InMemoryRunStore(),
 		});
 
@@ -111,8 +115,7 @@ describe('getRun()', () => {
 			return Response.json({ runId: 'run_01DAILYREPORT', status: 'completed' });
 		});
 		configureFlueRuntime({
-			target: 'cloudflare',
-			manifest: { agents: [] },
+			...cloudflareRuntime(),
 			createRunIndexForRequest: () => runIndex,
 			routeRunRequest,
 		});
@@ -131,18 +134,14 @@ describe('getRun()', () => {
 describe('listAgents()', () => {
 	it('returns built agents from the ambient deployment manifest', async () => {
 		configureFlueRuntime({
-			target: 'node',
-			manifest: {
-				agents: [
-					{
-						name: 'support',
-						description: 'Resolves customer support tickets.',
-						transports: { http: true },
-						defined: true,
-					},
-					{ name: 'offline', transports: {}, defined: false },
-				],
-			},
+			...nodeRuntime(),
+			agents: [
+				agentRecord('support', {
+					description: 'Resolves customer support tickets.',
+					route: async (_c, next) => next(),
+				}),
+				agentRecord('offline'),
+			],
 		});
 
 		await expect(listAgents()).resolves.toEqual([
@@ -152,7 +151,7 @@ describe('listAgents()', () => {
 				transports: { http: true },
 				defined: true,
 			},
-			{ name: 'offline', transports: {}, defined: false },
+			{ name: 'offline', transports: {}, defined: true },
 		]);
 	});
 });

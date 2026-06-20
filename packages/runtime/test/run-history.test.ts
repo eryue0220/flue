@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryRunStore } from '../src/node/run-store.ts';
 import { flue } from '../src/routing.ts';
 import { configureFlueRuntime, resetFlueRuntimeForTests } from '../src/runtime/flue-app.ts';
+import { nodeRuntime } from './helpers/runtime-config.ts';
 import type { RunStore } from '../src/runtime/run-store.ts';
 
 afterEach(() => {
@@ -11,11 +12,7 @@ afterEach(() => {
 });
 
 function createRunApp(runStore: RunStore) {
-	configureFlueRuntime({
-		target: 'node',
-		manifest: { agents: [] },
-		runStore,
-	});
+	configureFlueRuntime(nodeRuntime({ runStore }));
 	const app = new Hono();
 	app.route('/', flue());
 	return app;

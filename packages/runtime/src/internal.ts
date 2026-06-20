@@ -49,7 +49,14 @@ export type {
 export type { DispatchInput, DispatchQueue } from './runtime/dispatch-queue.ts';
 export type { EventStreamStore } from './runtime/event-stream-store.ts';
 export { SqliteEventStreamStore } from './runtime/event-stream-store.ts';
-export type { FlueRuntime, HandleRunRouteOptions } from './runtime/flue-app.ts';
+export type {
+	AgentRecord,
+	CloudflareRuntime,
+	FlueRuntime,
+	HandleRunRouteOptions,
+	NodeRuntime,
+	WorkflowRecord,
+} from './runtime/flue-app.ts';
 export {
 	configureFlueRuntime,
 	createDefaultFlueApp,
@@ -57,7 +64,10 @@ export {
 } from './runtime/flue-app.ts';
 export type {
 	AdmitDetachedWorkflowOptions,
-	CreateContextFn,
+	CreateAgentContextFn,
+	CreateAgentContextOptions,
+	CreateWorkflowContextFn,
+	CreateWorkflowContextOptions,
 	DirectAttachedOptions,
 	FailRecoveredRunOptions,
 	HandleAgentOptions,
@@ -65,7 +75,6 @@ export type {
 	InvokeWorkflowAttachedOptions,
 	StartWorkflowAdmissionFn,
 	WorkflowAttachedInvocationResult,
-	WorkflowRegistry,
 } from './runtime/handle-agent.ts';
 // Runtime modules consumed by the generated server entries.
 //

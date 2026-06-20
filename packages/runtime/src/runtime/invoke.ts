@@ -1,7 +1,6 @@
 import type { ActionDefinition, ActionInput, ActionInputSchema } from '../action.ts';
 import {
 	WorkflowAdmissionError,
-	WorkflowAdmissionUnavailableError,
 	WorkflowInputSerializationError,
 	WorkflowInputUnexpectedError,
 	WorkflowInvocationNotConfiguredError,
@@ -27,8 +26,8 @@ export interface WorkflowAdmissionInput {
 }
 
 export interface WorkflowInvocationRuntime {
-	resolveWorkflowName?: (workflow: WorkflowDefinition) => string | undefined;
-	admitWorkflow?: (input: WorkflowAdmissionInput) => Promise<WorkflowInvocationReceipt>;
+	workflows: ReadonlyArray<{ definition: WorkflowDefinition; name: string }>;
+	admitWorkflow: (input: WorkflowAdmissionInput) => Promise<WorkflowInvocationReceipt>;
 }
 
 export async function invokeWorkflow<TWorkflow extends WorkflowDefinition>(
@@ -37,9 +36,8 @@ export async function invokeWorkflow<TWorkflow extends WorkflowDefinition>(
 	runtime: WorkflowInvocationRuntime | undefined,
 ): Promise<WorkflowInvocationReceipt> {
 	if (!runtime) throw new WorkflowInvocationNotConfiguredError();
-	const workflowName = runtime.resolveWorkflowName?.(workflow);
+	const workflowName = runtime.workflows.find((record) => record.definition === workflow)?.name;
 	if (!workflowName) throw new WorkflowNotDiscoveredError();
-	if (!runtime.admitWorkflow) throw new WorkflowAdmissionUnavailableError();
 	if (!workflow.action.input && request.input !== undefined) throw new WorkflowInputUnexpectedError();
 	let input: unknown;
 	try {

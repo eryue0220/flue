@@ -29,8 +29,6 @@ import { generateWorkflowRunId } from './ids.ts';
 import { isBufferedRunEvent, isStreamExcludedEvent, type RunStore } from './run-store.ts';
 import { DirectAgentPayloadSchema } from './schemas.ts';
 
-export type WorkflowRegistry = Record<string, WorkflowDefinition>;
-
 export function assertWorkflowDefinition(value: unknown, name: string): asserts value is WorkflowDefinition {
 	if (!isWorkflowDefinition(value)) {
 		throw new Error(`[flue] Workflow "${name}" must default-export defineWorkflow(...).`);
@@ -74,12 +72,23 @@ function parseDirectAgentPayload(payload: unknown): DirectAgentPayload {
  *   - Node: env=process.env, defaultStore=in-memory.
  *   - Cloudflare: env=DO env, defaultStore=DO SQLite.
  */
-export type CreateContextFn = (
-	id: string,
-	runId: string | undefined,
-	request: Request,
-	initialEventIndex?: number,
-	dispatchId?: string,
+export interface CreateAgentContextOptions {
+	id: string;
+	request: Request;
+	initialEventIndex?: number;
+	dispatchId?: string;
+}
+
+export type CreateAgentContextFn = (options: CreateAgentContextOptions) => FlueContextInternal;
+
+export interface CreateWorkflowContextOptions {
+	runId: string;
+	request: Request;
+	initialEventIndex?: number;
+}
+
+export type CreateWorkflowContextFn = (
+	options: CreateWorkflowContextOptions,
 ) => FlueContextInternal;
 
 /**
@@ -109,7 +118,7 @@ export interface HandleWorkflowOptions {
 	request: Request;
 	workflowName: string;
 	workflow: WorkflowDefinition;
-	createContext: CreateContextFn;
+	createContext: CreateWorkflowContextFn;
 	startWorkflowAdmission?: StartWorkflowAdmissionFn;
 	runStore?: RunStore;
 	eventStreamStore: EventStreamStore;
@@ -205,7 +214,6 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 
 		const execution = await prepareWorkflowExecution({
 			workflowName,
-			id: runId,
 			runId,
 			workflow,
 			input,
@@ -227,12 +235,11 @@ export async function handleWorkflowRequest(opts: HandleWorkflowOptions): Promis
 
 export interface InvokeWorkflowAttachedOptions {
 	workflowName: string;
-	id: string;
 	runId: string;
 	workflow: WorkflowDefinition;
 	input: unknown;
 	request: Request;
-	createContext: CreateContextFn;
+	createContext: CreateWorkflowContextFn;
 	onEvent?: FlueEventCallback;
 	runStore?: RunStore;
 	eventStreamStore: EventStreamStore;
@@ -251,10 +258,9 @@ export interface WorkflowAttachedInvocationResult {
 
 export interface FailRecoveredRunOptions {
 	workflowName: string;
-	id: string;
 	runId: string;
 	request: Request;
-	createContext: CreateContextFn;
+	createContext: CreateWorkflowContextFn;
 	error: unknown;
 	runStore?: RunStore;
 	eventStreamStore: EventStreamStore;
@@ -265,7 +271,7 @@ export interface AdmitDetachedWorkflowOptions {
 	workflow: WorkflowDefinition;
 	input: unknown;
 	request: Request;
-	createContext: CreateContextFn;
+	createContext: CreateWorkflowContextFn;
 	startWorkflowAdmission?: StartWorkflowAdmissionFn;
 	runStore?: RunStore;
 	eventStreamStore: EventStreamStore;
@@ -274,12 +280,11 @@ export interface AdmitDetachedWorkflowOptions {
 
 interface WorkflowAdmissionOptions {
 	workflowName: string;
-	id: string;
 	runId: string;
 	workflow: WorkflowDefinition;
 	input: unknown;
 	request: Request;
-	createContext: CreateContextFn;
+	createContext: CreateWorkflowContextFn;
 	startWorkflowAdmission: StartWorkflowAdmissionFn;
 	runStore?: RunStore;
 	eventStreamStore: EventStreamStore;
@@ -304,7 +309,6 @@ async function prepareWorkflowExecution(
 ): Promise<AdmittedWorkflowExecution> {
 	const {
 		workflowName,
-		id,
 		runId,
 		workflow,
 		input,
@@ -317,7 +321,6 @@ async function prepareWorkflowExecution(
 	if (!runStore) throw new RunStoreUnavailableError();
 	const lifecycle = await createWorkflowRunLifecycle({
 		workflowName,
-		id,
 		runId,
 		input,
 		request,
@@ -389,7 +392,6 @@ export async function admitDetachedWorkflow(
 	const runId = opts.runId ?? generateWorkflowRunId();
 	const execution = await prepareWorkflowExecution({
 		workflowName: opts.workflowName,
-		id: runId,
 		runId,
 		workflow: opts.workflow,
 		input: opts.input,
@@ -448,7 +450,11 @@ export async function failRecoveredRun(opts: FailRecoveredRunOptions): Promise<v
 	const lifecycle: WorkflowRunLifecycle = {
 		...opts,
 		input,
-		ctx: opts.createContext(opts.id, opts.runId, opts.request, initialEventIndex),
+		ctx: opts.createContext({
+			runId: opts.runId,
+			request: opts.request,
+			initialEventIndex,
+		}),
 		startedAt,
 		startedAtMs: Number.isFinite(startedAtMs) ? startedAtMs : Date.now(),
 	};
@@ -584,7 +590,6 @@ export async function invokeWorkflowAttached(
 	parseActionInput(opts.workflow.action, opts.input);
 	const lifecycle = await createWorkflowRunLifecycle({
 		workflowName: opts.workflowName,
-		id: opts.id,
 		runId: opts.runId,
 		input: opts.input,
 		request: opts.request,
@@ -624,11 +629,10 @@ async function executeWorkflowDefinition(
 
 interface WorkflowRunLifecycleOptions {
 	workflowName: string;
-	id: string;
 	runId: string;
 	input: unknown;
 	request: Request;
-	createContext: CreateContextFn;
+	createContext: CreateWorkflowContextFn;
 	runStore?: RunStore;
 	eventStreamStore: EventStreamStore;
 	requirePersistedAdmission?: boolean;
@@ -645,7 +649,7 @@ async function createWorkflowRunLifecycle(
 ): Promise<WorkflowRunLifecycle> {
 	const startedAtMs = Date.now();
 	const startedAt = new Date(startedAtMs).toISOString();
-	const ctx = options.createContext(options.id, options.runId, options.request);
+	const ctx = options.createContext({ runId: options.runId, request: options.request });
 	const runStore = options.runStore;
 	const workflowName = options.workflowName;
 	try {

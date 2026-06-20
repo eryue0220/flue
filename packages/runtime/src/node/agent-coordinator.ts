@@ -15,7 +15,7 @@ import {
 } from '../runtime/agent-submissions.ts';
 import type { DispatchInput, DispatchQueue } from '../runtime/dispatch-queue.ts';
 import { agentStreamPath } from '../runtime/event-stream-store.ts';
-import type { CreateContextFn } from '../runtime/handle-agent.ts';
+import type { CreateAgentContextFn } from '../runtime/handle-agent.ts';
 import { isStreamExcludedEvent } from '../runtime/run-store.ts';
 import { deleteSessionTree } from '../session.ts';
 import type {
@@ -91,8 +91,8 @@ export function createNodeDispatchQueue(coordinator: NodeAgentCoordinator): Disp
 export function createNodeAgentCoordinator(options: {
 	submissions: AgentSubmissionStore;
 	sessions: SessionStore;
-	agents: Record<string, AgentDefinition>;
-	createContext: CreateContextFn;
+	agents: ReadonlyArray<{ name: string; definition: AgentDefinition }>;
+	createContext: CreateAgentContextFn;
 	eventStreamStore: import('../runtime/event-stream-store.ts').EventStreamStore;
 }): NodeAgentCoordinator {
 	const { submissions, sessions, agents, createContext, eventStreamStore } = options;
@@ -161,13 +161,11 @@ export function createNodeAgentCoordinator(options: {
 
 	function makeSubmissionContext(input: AgentSubmissionInput) {
 		return (dispatchId: string | undefined) => {
-			const ctx = createContext(
-				input.id,
-				undefined,
-				submissionSyntheticRequest(input),
-				undefined,
+			const ctx = createContext({
+				id: input.id,
+				request: submissionSyntheticRequest(input),
 				dispatchId,
-			);
+			});
 			// Subscribe to events for durable agent event persistence.
 			// createStream is called before processSubmission (see spawnSubmissionTask).
 			const streamPath = agentStreamPath(input.agent, input.id);
@@ -182,7 +180,7 @@ export function createNodeAgentCoordinator(options: {
 	}
 
 	function resolveAgent(name: string): AgentDefinition {
-		const agent = agents[name];
+		const agent = agents.find((record) => record.name === name)?.definition;
 		if (!agent) throw new Error(`[flue] submission target agent "${name}" has no agent definition.`);
 		return agent;
 	}
@@ -406,7 +404,7 @@ export function createNodeAgentCoordinator(options: {
 			// session — exactly the corruption leases exist to prevent.
 			if (activeSubmissions.has(submission.submissionId)) continue;
 			const agentName = submission.input.agent;
-			const agent = agents[agentName];
+			const agent = agents.find((record) => record.name === agentName)?.definition;
 			if (!agent) {
 				console.error('[flue:submission-reconciliation]', {
 					submissionId: submission.submissionId,
@@ -498,7 +496,7 @@ export function createNodeAgentCoordinator(options: {
 
 		async admitDispatch(input) {
 			if (stopping) throw new Error('[flue] Coordinator is shutting down.');
-			const agent = agents[input.agent];
+			const agent = agents.find((record) => record.name === input.agent)?.definition;
 			if (!agent) {
 				throw new Error(`[flue] dispatch target agent "${input.agent}" has no agent definition.`);
 			}
@@ -520,7 +518,7 @@ export function createNodeAgentCoordinator(options: {
 				waitForResult = true,
 			) => {
 				if (stopping) throw new Error('[flue] Coordinator is shutting down.');
-				const agent = agents[agentName];
+				const agent = agents.find((record) => record.name === agentName)?.definition;
 				if (!agent) {
 					throw new Error(`[flue] direct prompt target agent "${agentName}" has no agent definition.`);
 				}

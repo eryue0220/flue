@@ -30,10 +30,9 @@ import { enqueueDispatch } from './dispatch.ts';
 import type { DispatchQueue } from './dispatch-queue.ts';
 import { agentStreamPath, type EventStreamStore, runStreamPath } from './event-stream-store.ts';
 import {
-	type CreateContextFn,
+	type CreateWorkflowContextFn,
 	handleAgentRequest,
 	handleWorkflowRequest,
-	type WorkflowRegistry,
 } from './handle-agent.ts';
 import { handleStreamHead, handleStreamRead } from './handle-stream-routes.ts';
 import { generateWorkflowRunId } from './ids.ts';
@@ -53,46 +52,43 @@ import {
 	WorkflowRouteParamSchema,
 } from './schemas.ts';
 
-export interface FlueRuntime {
-	target: 'node' | 'cloudflare';
+export interface AgentRecord {
+	name: string;
+	definition: AgentDefinition;
+	description?: string;
+	route?: MiddlewareHandler;
+}
+
+export interface WorkflowRecord {
+	name: string;
+	definition: WorkflowDefinition;
+	route?: MiddlewareHandler;
+}
+
+interface RuntimeBase {
 	devMode?: boolean;
-
-	// ─── Node-only ──────────────────────────────────────────────────────────
-
-	workflows?: WorkflowRegistry;
-	agentRouteMiddleware?: Record<string, MiddlewareHandler>;
-	workflowRouteMiddleware?: Record<string, MiddlewareHandler>;
+	runtimeVersion?: string;
+	agents: AgentRecord[];
+	workflows: WorkflowRecord[];
 	channelHandlers?: Record<string, Record<string, (c: Context) => Response | Promise<Response>>>;
+	dispatchQueue: DispatchQueue;
+	admitWorkflow: (input: { workflowName: string; input: unknown }) => Promise<{ runId: string }>;
+}
 
-	/**
-	 * Per-target context factory. Required when {@link target} is `'node'`.
-	 */
-	createContext?: CreateContextFn;
+export interface NodeRuntime extends RuntimeBase {
+	target: 'node';
+	createWorkflowContext: CreateWorkflowContextFn;
+	createAgentAdmission: (
+		agentName: string,
+		instanceId: string,
+	) => AttachedAgentSubmissionAdmission;
+	runStore: RunStore;
+	eventStreamStore: EventStreamStore;
+}
 
-	/**
-	 * Per-agent durable admission factory, keyed by agent name. Direct HTTP
-	 * prompts are persisted as durable submissions. Each factory receives the
-	 * instance ID from the route and returns the admission hook for that
-	 * specific agent instance. Created by the Node coordinator's
-	 * `createAdmission()`.
-	 */
-	createAdmission?: Record<string, (instanceId: string) => AttachedAgentSubmissionAdmission>;
-
-	/** Node workflow-run store: records plus cross-run lookup and listing. */
-	runStore?: RunStore;
-
-	/**
-	 * Durable event stream store for DS-compatible event persistence.
-	 * Required when {@link target} is `'node'` — the generated Node entry
-	 * always provides one. On Cloudflare, streams live in per-instance
-	 * Durable Object stores instead, so the worker-level runtime has none.
-	 */
-	eventStreamStore?: EventStreamStore;
-
-	// ─── Cloudflare-only ────────────────────────────────────────────────────
-
-	/** Forward an incoming request to the per-agent Durable Object. Required when {@link target} is `'cloudflare'`. */
-	routeAgentRequest?: (
+export interface CloudflareRuntime extends RuntimeBase {
+	target: 'cloudflare';
+	routeAgentRequest: (
 		request: Request,
 		env: unknown,
 		target: { agentName: string; instanceId: string },
@@ -107,14 +103,14 @@ export interface FlueRuntime {
 	 * `RouteNotFoundError` envelope so the response shape stays
 	 * consistent with every other miss.
 	 */
-	routeWorkflowRequest?: (
+	routeWorkflowRequest: (
 		request: Request,
 		env: unknown,
 		target: { workflowName: string; instanceId: string },
 	) => Promise<Response | null>;
 
 	/** Cloudflare-only forwarding hook for registry-resolved run requests. */
-	routeRunRequest?: (
+	routeRunRequest: (
 		request: Request,
 		env: unknown,
 		target: { workflowName: string; runId: string },
@@ -124,26 +120,10 @@ export interface FlueRuntime {
 	 * Cloudflare-only factory for the request-scoped run index client
 	 * (cross-deployment lookup/listing over the `FlueRegistry` index DO).
 	 */
-	createRunIndexForRequest?: (env: unknown) => RunListing | undefined;
-
-	/** Package version inlined by the generated entry for OpenAPI metadata. */
-	runtimeVersion?: string;
-
-	/** Build manifest inlined by the generated entry. */
-	manifest?: FlueManifest;
-
-	/** Internal dispatch admission queue. Defaults to process-lifetime memory. */
-	dispatchQueue?: DispatchQueue;
-
-	/** Resolve discovered/default-exported agent definition identities for global dispatch. */
-	resolveDispatchAgentName?: (agent: AgentDefinition) => string | undefined;
-
-	/** Resolve the exact discovered/default-exported Workflow Definition identity. */
-	resolveWorkflowName?: (workflow: WorkflowDefinition) => string | undefined;
-
-	/** Admit an ambient workflow invocation through the target runtime. */
-	admitWorkflow?: (input: { workflowName: string; input: unknown }) => Promise<{ runId: string }>;
+	createRunIndexForRequest: (env: unknown) => RunListing | undefined;
 }
+
+export type FlueRuntime = NodeRuntime | CloudflareRuntime;
 
 /** Cross-deployment run lookup/listing surface of a {@link RunStore}. */
 export type RunListing = Pick<RunStore, 'lookupRun' | 'listRuns'>;
@@ -158,14 +138,6 @@ export interface AgentManifestEntry {
 	transports: { http?: true };
 	/** Whether the module default-exports an agent definition. */
 	defined: boolean;
-}
-
-interface FlueManifest {
-	agents: AgentManifestEntry[];
-	workflows?: Array<{
-		name: string;
-		transports: { http?: boolean };
-	}>;
 }
 
 /**
@@ -202,11 +174,6 @@ export async function dispatch(
 				'This usually means it was used outside a Flue-built server entry.',
 		);
 	}
-	if (!rt.dispatchQueue) {
-		throw new Error(
-			'[flue] dispatch() cannot be accepted because no dispatch queue is configured.',
-		);
-	}
 	const request = isAgentDefinitionValue(agentOrRequest)
 		? resolveAgentDefinitionDispatchRequest(agentOrRequest, maybeRequest, rt)
 		: agentOrRequest;
@@ -236,7 +203,7 @@ function resolveAgentDefinitionDispatchRequest(
 	rt: FlueRuntime,
 ): NamedAgentDispatchRequest {
 	if (!request) throw new Error('[flue] dispatch(agent, request) requires a dispatch request.');
-	const name = rt.resolveDispatchAgentName?.(agent);
+	const name = rt.agents.find((record) => record.definition === agent)?.name;
 	if (!name) {
 		throw new Error(
 			'[flue] dispatch() target agent definition is not a discovered default-exported agent in this built application.',
@@ -489,35 +456,28 @@ const workflowRouteHandler: MiddlewareHandler = async (c) => {
 	}
 
 	const name = c.req.param('name') ?? '';
-	const workflows = rt.manifest?.workflows ?? [];
 	validateWorkflowRequest({
 		method: c.req.method,
 		name,
-		registeredWorkflows: workflows.map((workflow) => workflow.name),
+		registeredWorkflows: rt.workflows.map((workflow) => workflow.name),
 		httpWorkflows: registeredWorkflowsForTransport(rt),
 	});
 	const request = c.req.raw.clone();
 
-	return runAttachedMiddleware(c, rt.workflowRouteMiddleware?.[name], async () => {
+	const record = rt.workflows.find((workflow) => workflow.name === name);
+	return runAttachedMiddleware(c, record?.route, async () => {
 		if (rt.target === 'node') {
-			const workflow = rt.workflows?.[name];
-			const createContext = rt.createContext;
-			if (!workflow || !createContext) {
-				throw new Error('[flue] Node runtime is missing workflow configuration.');
-			}
+			if (!record) throw new Error('[flue] Node runtime is missing workflow configuration.');
 			return handleWorkflowRequest({
 				request,
 				workflowName: name,
-				workflow,
-				createContext,
+				workflow: record.definition,
+				createContext: rt.createWorkflowContext,
 				runStore: rt.runStore,
-				eventStreamStore: requireNodeEventStreamStore(rt),
+				eventStreamStore: rt.eventStreamStore,
 			});
 		}
 
-		if (!rt.routeWorkflowRequest) {
-			throw new Error('[flue] Cloudflare runtime is missing workflow route forwarding.');
-		}
 		// One workflow run = one workflow DO instance. The instanceId IS the
 		// runId; the DO it lands on then re-uses that value to seed its run
 		// record via handleWorkflowRequest({ runId: instanceId, ... }).
@@ -556,7 +516,8 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 
 	// All agent routes (POST, GET, HEAD) go through attached middleware so
 	// user-defined auth/rate-limiting applies to stream reads too.
-	return runAttachedMiddleware(c, rt.agentRouteMiddleware?.[name], async () => {
+	const record = rt.agents.find((agent) => agent.name === name);
+	return runAttachedMiddleware(c, record?.route, async () => {
 		// DS stream read (GET/HEAD) — served directly for Node, forwarded for CF.
 		if (c.req.method === 'GET' || c.req.method === 'HEAD') {
 			const streamPath = agentStreamPath(name, id);
@@ -565,9 +526,6 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 			}
 
 			// Cloudflare: forward to the agent DO.
-			if (!rt.routeAgentRequest) {
-				throw new Error('[flue] Cloudflare runtime is missing agent route forwarding.');
-			}
 			const response = await rt.routeAgentRequest(request, c.env, {
 				agentName: name,
 				instanceId: id,
@@ -577,7 +535,7 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 		}
 
 		if (rt.target === 'node') {
-			const admitAttachedSubmission = rt.createAdmission?.[name]?.(id);
+			const admitAttachedSubmission = rt.createAgentAdmission(name, id);
 			if (!admitAttachedSubmission) {
 				throw new Error('[flue] Node runtime is missing agent admission configuration.');
 			}
@@ -585,14 +543,11 @@ const agentRouteHandler: MiddlewareHandler = async (c) => {
 				request,
 				id,
 				agentName: name,
-				eventStreamStore: requireNodeEventStreamStore(rt),
+				eventStreamStore: rt.eventStreamStore,
 				admitAttachedSubmission,
 			});
 		}
 
-		if (!rt.routeAgentRequest) {
-			throw new Error('[flue] Cloudflare runtime is missing agent route forwarding.');
-		}
 		const response = await rt.routeAgentRequest(request, c.env, {
 			agentName: name,
 			instanceId: id,
@@ -696,8 +651,7 @@ const runStreamReadHandler: MiddlewareHandler = async (c) => {
 	const pointer = await findRunPointer(rt, c.env, runId);
 	const workflowName =
 		pointer && isRegisteredWorkflow(rt, pointer.workflowName) ? pointer.workflowName : undefined;
-	const middleware =
-		workflowName === undefined ? undefined : rt.workflowRouteMiddleware?.[workflowName];
+	const middleware = rt.workflows.find((workflow) => workflow.name === workflowName)?.route;
 
 	return runAttachedMiddleware(c, middleware, async () => {
 		if (workflowName === undefined) throw new RunNotFoundError({ runId });
@@ -714,7 +668,7 @@ const runStreamReadHandler: MiddlewareHandler = async (c) => {
 			return nodeStreamReadResponse(rt, method, runStreamPath(runId), c.req.raw);
 		}
 
-		const response = await rt.routeRunRequest?.(c.req.raw, c.env, { workflowName, runId });
+		const response = await rt.routeRunRequest(c.req.raw, c.env, { workflowName, runId });
 		if (response) return response;
 		throw new RouteNotFoundError({ method, path: new URL(c.req.url).pathname });
 	});
@@ -743,29 +697,14 @@ function lazyOpenApiRouteHandler(
 	return (c, next) => openAPIRouteHandler(app, getOptions())(c, next);
 }
 
-/**
- * Resolve the event stream store on a Node-target runtime. The generated
- * Node entry always constructs one, so a missing store is a wiring bug —
- * fail loudly instead of masquerading as a missing stream/run.
- */
-function requireNodeEventStreamStore(rt: FlueRuntime): EventStreamStore {
-	if (!rt.eventStreamStore) {
-		throw new Error(
-			'[flue] Node runtime configured without an event stream store. ' +
-				'The generated Node entry always provides one — this indicates a misconfigured runtime.',
-		);
-	}
-	return rt.eventStreamStore;
-}
-
 /** Serve a DS stream HEAD/GET from the Node runtime's store. */
 function nodeStreamReadResponse(
-	rt: FlueRuntime,
+	rt: NodeRuntime,
 	method: string,
 	streamPath: string,
 	request: Request,
 ): Promise<Response> {
-	const store = requireNodeEventStreamStore(rt);
+	const store = rt.eventStreamStore;
 	if (method === 'HEAD') {
 		return handleStreamHead(store, streamPath);
 	}
@@ -784,19 +723,15 @@ async function findRunPointer(
 	runId: string,
 ): Promise<RunPointer | null> {
 	if (rt.target === 'cloudflare') {
-		if (!rt.createRunIndexForRequest || !rt.routeRunRequest) {
-			throw new RunStoreUnavailableError();
-		}
 		const index = rt.createRunIndexForRequest(env);
 		if (!index) throw new RunStoreUnavailableError();
 		return index.lookupRun(runId);
 	}
-	if (!rt.runStore) throw new RunStoreUnavailableError();
 	return rt.runStore.lookupRun(runId);
 }
 
 function isRegisteredWorkflow(rt: FlueRuntime, workflowName: string): boolean {
-	return (rt.manifest?.workflows ?? []).some((workflow) => workflow.name === workflowName);
+	return rt.workflows.some((workflow) => workflow.name === workflowName);
 }
 
 function requiredRuntime(): FlueRuntime {
@@ -838,13 +773,11 @@ function normalizeAttachedRequest(request: Request, pathname: string): Request {
 }
 
 function registeredAgentsForTransport(rt: FlueRuntime): readonly string[] {
-	return (rt.manifest?.agents ?? [])
-		.filter((agent) => agent.transports.http === true)
-		.map((agent) => agent.name);
+	return rt.agents.filter((agent) => agent.route !== undefined).map((agent) => agent.name);
 }
 
 function registeredWorkflowsForTransport(rt: FlueRuntime): readonly string[] {
-	return (rt.manifest?.workflows ?? [])
-		.filter((workflow) => workflow.transports.http === true)
+	return rt.workflows
+		.filter((workflow) => workflow.route !== undefined)
 		.map((workflow) => workflow.name);
 }

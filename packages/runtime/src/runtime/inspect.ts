@@ -33,17 +33,13 @@ export async function listRuns(options?: ListRunsOpts): Promise<ListRunsResponse
 export async function getRun(runId: string): Promise<RunRecord | null> {
 	const rt = requireInspectRuntime('getRun');
 
-	if (rt.target === 'node') {
-		if (!rt.runStore) throw new RunStoreUnavailableError();
-		return rt.runStore.getRun(runId);
-	}
+	if (rt.target === 'node') return rt.runStore.getRun(runId);
 
 	// Cloudflare: full records live in the owning per-workflow Durable
 	// Object; resolve the pointer from the index DO, then read the record
 	// through the DO's `?meta` view.
 	const pointer = await requireRunListing(rt).lookupRun(runId);
 	if (!pointer) return null;
-	if (!rt.routeRunRequest) throw new RunStoreUnavailableError();
 	const response = await rt.routeRunRequest(
 		new Request(`https://flue.invalid/runs/${encodeURIComponent(runId)}?meta`),
 		undefined,
@@ -59,9 +55,11 @@ export async function getRun(runId: string): Promise<RunRecord | null> {
 /** Lists the agents built into this deployment. */
 export async function listAgents(): Promise<AgentManifestEntry[]> {
 	const rt = requireInspectRuntime('listAgents');
-	return (rt.manifest?.agents ?? []).map((agent) => ({
-		...agent,
-		transports: { ...agent.transports },
+	return rt.agents.map((agent) => ({
+		name: agent.name,
+		...(agent.description === undefined ? {} : { description: agent.description }),
+		transports: agent.route === undefined ? {} : { http: true as const },
+		defined: true,
 	}));
 }
 
@@ -78,10 +76,9 @@ function requireInspectRuntime(label: string): FlueRuntime {
 
 function requireRunListing(rt: FlueRuntime): RunListing {
 	if (rt.target === 'cloudflare') {
-		const index = rt.createRunIndexForRequest?.(undefined);
+		const index = rt.createRunIndexForRequest(undefined);
 		if (!index) throw new RunStoreUnavailableError();
 		return index;
 	}
-	if (!rt.runStore) throw new RunStoreUnavailableError();
 	return rt.runStore;
 }

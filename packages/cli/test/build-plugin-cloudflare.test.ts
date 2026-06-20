@@ -15,6 +15,14 @@ describe('CloudflarePlugin', () => {
 		expect(entry).toContain('class FlueDraftWorkflow');
 		expect(entry).toContain('bindingName: "FLUE_DRAFT_WORKFLOW_AGENT"');
 		expect(entry).toContain('bindingName: "FLUE_DRAFT_WORKFLOW"');
+		expect(entry).toContain(
+			'resolveCloudflareExtension(agentModules["draft-workflow"]',
+		);
+		expect(entry).toContain(
+			'resolveCloudflareExtension(workflowModules["draft"]',
+		);
+		expect(entry).not.toContain('runtimeAgents');
+		expect(entry).not.toContain('runtimeWorkflows');
 	});
 
 	it('delegates durable agent execution to the Cloudflare runtime with SQL-backed stores', async () => {
@@ -28,6 +36,10 @@ describe('CloudflarePlugin', () => {
 		expect(entry).toContain('createCloudflareAgentRuntime');
 		expect(entry).toContain('createSqlSessionStore');
 		expect(entry).toContain('createSqlRunStore');
+		expect(entry).toContain('createContext: createAgentContextForRequest');
+		expect(entry).toContain(
+			'function createAgentContextForRequest({ executionStore, instance, request, initialEventIndex, dispatchId })',
+		);
 	});
 
 	it('wires ambient workflow invocation through a private per-run Durable Object request', async () => {
@@ -37,10 +49,15 @@ describe('CloudflarePlugin', () => {
 			}),
 		);
 
-		expect(entry).toContain('resolveWorkflowName: (workflow) => workflowNames.get(workflow)');
+		expect(entry).toContain(
+			'const { agents, workflows, channelHandlers } = normalizeBuiltModules(agentModules, workflowModules, channelModules);',
+		);
+		expect(entry).toContain('workflows.find((record) => record.name === workflowName)?.definition');
 		expect(entry).toContain("const INTERNAL_WORKFLOW_INVOKE_PATH = '/_flue/internal/workflow-invoke'");
 		expect(entry).toContain("doInstance.runFiber('flue:workflow:' + runId");
-		expect(entry).toContain('const workflow = workflows[workflowName]');
+		expect(entry).toContain(
+			'const workflow = workflows.find((record) => record.name === workflowName)?.definition',
+		);
 	});
 
 	it('imports discovered channels and configures their normalized handlers', async () => {

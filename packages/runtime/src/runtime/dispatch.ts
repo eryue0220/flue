@@ -3,11 +3,7 @@ import type { DispatchReceipt, NamedAgentDispatchRequest } from '../types.ts';
 import type { DispatchQueue } from './dispatch-queue.ts';
 
 export interface DispatchRuntime {
-	manifest?: {
-		agents: Array<{
-			name: string;
-		}>;
-	};
+	agents: ReadonlyArray<{ name: string }>;
 }
 
 export async function enqueueDispatch(options: {
@@ -49,5 +45,5 @@ function validateAndCloneDispatchRequest(
 }
 
 function agentExists(rt: DispatchRuntime, agentName: string): boolean {
-	return (rt.manifest?.agents ?? []).some((agent) => agent.name === agentName);
+	return rt.agents.some((agent) => agent.name === agentName);
 }
