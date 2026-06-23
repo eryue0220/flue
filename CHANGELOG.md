@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## @flue/react 1.0.0-beta.4 - 2026-06-23
+
 ### Fixes & Other Changes
 
 - `useFlueAgent()` now publishes requested durable history atomically, exposes `historyReady`, continues live observation from the exact hydrated checkpoint, and keeps optimistic messages in their canonical transcript position when durable echoes arrive.
