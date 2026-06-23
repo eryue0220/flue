@@ -198,18 +198,59 @@ test('does not report ready when an explicit requested port is occupied', async 
 	}
 });
 
-test('watches an explicit config outside the project root', async () => {
+test('reloads the Node application when an external environment file changes', async () => {
+	const root = createFixtureRoot();
+	const envRoot = createFixtureRoot();
+	const envPath = path.join(envRoot, '.env');
+	const port = await getAvailablePort();
+	fs.mkdirSync(path.join(root, 'workflows'));
+	fs.writeFileSync(
+		path.join(root, 'workflows', 'environment.mjs'),
+		`import { defineAgent, defineWorkflow } from '@flue/runtime';\nexport const route = async (_c, next) => next();\nexport default defineWorkflow({ agent: defineAgent(() => ({ model: false })), async run() { return { value: process.env.FLUE_DEV_ENV_TEST }; } });\n`,
+	);
+	fs.writeFileSync(envPath, 'FLUE_DEV_ENV_TEST=first\n');
+
+	const dev = startDev(root, ['--target', 'node', '--env', envPath, '--port', String(port)]);
+	try {
+		await waitForServer(port, dev.logs, 'environment', { value: 'first' });
+		fs.writeFileSync(envPath, 'FLUE_DEV_ENV_TEST=second\n');
+		await dev.waitForLog(`${envPath} changed; restarting`);
+		await dev.waitForLog(`http://localhost:${port}`, 2);
+		await waitForServer(port, dev.logs, 'environment', { value: 'second' });
+	} finally {
+		await dev.stop();
+	}
+});
+
+test('polls an explicit config when its directory cannot be watched', async () => {
 	const root = createFixtureRoot();
 	const configRoot = createFixtureRoot();
 	const configPath = path.join(configRoot, 'external.config.mjs');
+	const preloadPath = path.join(root, 'reject-config-directory-watch.cjs');
 	const port = await getAvailablePort();
 	writeWorkflow(root);
 	fs.writeFileSync(
 		configPath,
 		`export default { target: 'node', root: ${JSON.stringify(root)}, output: ${JSON.stringify(path.join(root, 'dist-one'))} };\n`,
 	);
+	fs.writeFileSync(
+		preloadPath,
+		`const fs = require('node:fs');
+const originalWatch = fs.watch;
+fs.watch = function watch(target, ...args) {
+	if (String(target) === ${JSON.stringify(configRoot)}) {
+		const error = new Error('too many open files, watch');
+		error.code = 'EMFILE';
+		throw error;
+	}
+	return originalWatch.call(this, target, ...args);
+};
+`,
+	);
 
-	const dev = startDev(root, ['--config', configPath, '--port', String(port)]);
+	const dev = startDev(root, ['--config', configPath, '--port', String(port)], {
+		NODE_OPTIONS: `--require=${preloadPath}`,
+	});
 	try {
 		await waitForServer(port, dev.logs);
 		fs.writeFileSync(
@@ -304,23 +345,28 @@ async function getAvailablePort() {
 	return address.port;
 }
 
-async function waitForServer(port, logs = () => '') {
+async function waitForServer(
+	port,
+	logs = () => '',
+	workflow = 'smoke',
+	expectedResult = { ok: true },
+) {
 	let body;
 	await waitFor(
 		async () => {
 			try {
-				const response = await fetch(`http://127.0.0.1:${port}/workflows/smoke?wait=result`, {
+				const response = await fetch(`http://127.0.0.1:${port}/workflows/${workflow}?wait=result`, {
 					method: 'POST',
 				});
 				body = await response.json();
-				return response.ok;
+				return response.ok && assert.deepEqual(body.result, expectedResult) === undefined;
 			} catch {
 				return false;
 			}
 		},
-		() => `Timed out waiting for server on port ${port}\n\n${logs()}`,
+		() =>
+			`Timed out waiting for server on port ${port}\nLast response: ${JSON.stringify(body)}\n\n${logs()}`,
 	);
-	assert.deepEqual(body.result, { ok: true });
 }
 
 async function waitForUnavailable(port, state) {

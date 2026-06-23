@@ -8,9 +8,9 @@
  *
  * # Watching
  *
- * Watching uses `node:fs.watch` recursive (Node 20+). Debounced 150ms. The
- * Node path treats every non-ignored change as a rebuild trigger; the
- * Cloudflare path filters to "structural" changes only.
+ * Watching uses each target's Vite server. Changes are debounced by 150ms.
+ * The Node path treats every non-ignored change as a rebuild trigger; the
+ * Cloudflare path filters to structural changes only.
  */
 import * as fs from 'node:fs';
 import { createServer } from 'node:net';
@@ -192,28 +192,12 @@ export async function dev(options: DevOptions): Promise<void> {
 	devLog(pc.dim('watching for file changes...'));
 	options.onReady?.();
 
-	// ─── Watch loop ──────────────────────────────────────────────────────────
-
-	const envWatcher = watchEnvFile(envFile, () => {
-		if (options.target === 'node') {
-			try {
-				envLoader.apply();
-			} catch (err) {
-				error(`Environment reload failed: ${err instanceof Error ? err.message : String(err)}`);
-				return;
-			}
-		}
-		devLog(`${pc.dim('changed')} ${path.relative(root, envFile) || envFile}`);
-		rebuilder.schedule(true);
-	});
-
 	// ─── Lifecycle ───────────────────────────────────────────────────────────
 
 	let shuttingDown = false;
 	const shutdown = async (_signal: string, exitCode: number) => {
 		if (shuttingDown) return;
 		shuttingDown = true;
-		envWatcher?.close();
 		try {
 			await reloader.stop();
 		} catch (err) {
@@ -316,20 +300,6 @@ function createRebuilder(
 			}, 150);
 		},
 	};
-}
-
-// ─── Watcher ────────────────────────────────────────────────────────────────
-
-function watchEnvFile(envFile: string, onChange: () => void): fs.FSWatcher | undefined {
-	try {
-		const envDirectory = path.dirname(envFile);
-		const envBasename = path.basename(envFile);
-		return fs.watch(envDirectory, (_event, filename) => {
-			if (filename?.toString() === envBasename) onChange();
-		});
-	} catch {
-		return undefined;
-	}
 }
 
 // ─── Node reloader ──────────────────────────────────────────────────────────

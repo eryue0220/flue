@@ -698,27 +698,14 @@ async function devCommand(args: DevArgs) {
 	}
 }
 
-function readConfigFileState(file: string): string | undefined {
-	try {
-		const stat = fs.statSync(file);
-		return `${stat.mtimeMs}:${stat.size}`;
-	} catch {
-		return undefined;
-	}
-}
-
 function superviseDevCommand(args: DevArgs) {
 	const configFiles = devConfigFiles(args);
-	const configFilesByDirectory = new Map<string, Set<string>>();
-	const configFileStates = new Map(configFiles.map((file) => [file, readConfigFileState(file)]));
-	for (const file of configFiles) {
-		const directory = path.dirname(file);
-		const basenames = configFilesByDirectory.get(directory) ?? new Set<string>();
-		basenames.add(path.basename(file));
-		configFilesByDirectory.set(directory, basenames);
-	}
+	const envLoader = loadCliEnvironment(args);
+	const envFile = envLoader.file;
+	envLoader.restore();
+	const watchedFiles = new Set([...configFiles, envFile]);
+	const configWatchInterval = 500;
 
-	const watchers: fs.FSWatcher[] = [];
 	let child: ChildProcess | undefined;
 	let restartTimer: NodeJS.Timeout | undefined;
 	let restartRequested = false;
@@ -727,7 +714,7 @@ function superviseDevCommand(args: DevArgs) {
 	let shuttingDown = false;
 
 	const closeWatchers = () => {
-		for (const watcher of watchers.splice(0)) watcher.close();
+		for (const file of watchedFiles) fs.unwatchFile(file);
 	};
 	const exit = (code: number) => {
 		closeWatchers();
@@ -763,10 +750,8 @@ function superviseDevCommand(args: DevArgs) {
 		});
 	};
 	const restart = (file: string) => {
-		for (const configFile of configFiles) {
-			configFileStates.set(configFile, readConfigFileState(configFile));
-		}
-		console.error(`${pc.dim('config')} ${file} changed; restarting`);
+		const kind = file === envFile ? 'env' : 'config';
+		console.error(`${pc.dim(kind)} ${file} changed; restarting`);
 		restartRequested = true;
 		if (restartTimer) clearTimeout(restartTimer);
 		restartTimer = setTimeout(() => {
@@ -776,31 +761,17 @@ function superviseDevCommand(args: DevArgs) {
 		child?.kill('SIGTERM');
 	};
 
-	try {
-		for (const [directory, basenames] of configFilesByDirectory) {
-			const watcher = fs.watch(directory, (_event, filename) => {
-				const basename = filename?.toString();
-				if (basename !== undefined) {
-					if (!basenames.has(basename)) return;
-					restart(path.join(directory, basename));
-					return;
-				}
-				for (const configFile of configFiles) {
-					if (configFileStates.get(configFile) !== readConfigFileState(configFile)) {
-						restart(configFile);
-						return;
-					}
-				}
-			});
-			watcher.on('error', (err) => {
-				cliError(`Config watcher failed: ${err instanceof Error ? err.message : String(err)}`);
-				exit(1);
-			});
-			watchers.push(watcher);
-		}
-	} catch (err) {
-		cliError(`Config watcher failed: ${err instanceof Error ? err.message : String(err)}`);
-		exit(1);
+	for (const file of watchedFiles) {
+		fs.watchFile(file, { interval: configWatchInterval }, (current, previous) => {
+			if (
+				current.mtimeMs === previous.mtimeMs &&
+				current.ctimeMs === previous.ctimeMs &&
+				current.size === previous.size &&
+				current.ino === previous.ino
+			)
+				return;
+			restart(file);
+		});
 	}
 
 	const shutdown = (signal: NodeJS.Signals) => {
