@@ -44,7 +44,8 @@ export const summarize = defineAction({
   output: v.object({ summary: v.string() }),
 
   async run({ harness, input }) {
-    const response = await (await harness.session()).prompt(input.text);
+    const session = await harness.session();
+    const response = await session.prompt(`Summarize this text: ${input.text}`);
     return { summary: response.text };
   },
 });
