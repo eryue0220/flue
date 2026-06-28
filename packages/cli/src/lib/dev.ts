@@ -141,7 +141,7 @@ export async function dev(options: DevOptions): Promise<void> {
 	const onProjectChange = (filePath: string) => {
 		const absolutePath = path.resolve(filePath);
 		if (absolutePath === envFile || configFiles.has(absolutePath)) return;
-		const outputRelative = path.relative(output, absolutePath);
+		const outputRelative = path.relative(output, absolutePath).replace(/\\/g, '/');
 		if (!outputRelative.startsWith('../') && !path.isAbsolute(outputRelative)) return;
 		const relPath = path.relative(root, absolutePath).replace(/\\/g, '/');
 		if (!relPath || relPath.startsWith('../') || path.isAbsolute(relPath)) return;
