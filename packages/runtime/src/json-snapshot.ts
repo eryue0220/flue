@@ -45,6 +45,11 @@ function assertJsonLike(value: unknown, path: string, seen: WeakSet<object>): vo
 		);
 	}
 	for (const [key, child] of Object.entries(value)) {
+		// Match JSON.stringify: an object property whose value is undefined is
+		// dropped, not an error. Idiomatic optional fields (`field?: T` left
+		// unset) serialize cleanly; only undefined in non-droppable positions
+		// (top level, array elements) still fails below.
+		if (child === undefined) continue;
 		assertJsonLike(child, `${path}.${key}`, seen);
 	}
 	seen.delete(value);

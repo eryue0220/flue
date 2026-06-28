@@ -470,20 +470,13 @@ describe('Action model tools', () => {
 		});
 	});
 
-	it('rejects Action outputs that JSON.stringify would silently coerce or discard', async () => {
+	it('rejects Action outputs that JSON.stringify would silently coerce', async () => {
 		const provider = createProvider();
 		const nonFinite = defineAction({
 			name: 'non_finite_output',
 			description: 'Return a non-finite number.',
 			async run() {
 				return { count: Number.NaN };
-			},
-		});
-		const nestedUndefined = defineAction({
-			name: 'undefined_output',
-			description: 'Return nested undefined.',
-			async run() {
-				return { result: undefined } as never;
 			},
 		});
 		const dateOutput = defineAction({
@@ -498,12 +491,6 @@ describe('Action model tools', () => {
 			fauxAssistantMessage(fauxToolCall('non_finite_output', {}), { stopReason: 'toolUse' }),
 			(context) => {
 				toolErrors.push(context.messages.at(-1));
-				return fauxAssistantMessage(fauxToolCall('undefined_output', {}), {
-					stopReason: 'toolUse',
-				});
-			},
-			(context) => {
-				toolErrors.push(context.messages.at(-1));
 				return fauxAssistantMessage(fauxToolCall('date_output', {}), { stopReason: 'toolUse' });
 			},
 			(context) => {
@@ -516,13 +503,13 @@ describe('Action model tools', () => {
 		).initializeRootHarness(
 			defineAgent(() => ({
 				model: `${provider.getModel().provider}/${provider.getModel().id}`,
-				actions: [nonFinite, nestedUndefined, dateOutput],
+				actions: [nonFinite, dateOutput],
 			})),
 		);
 
 		await (await harness.session()).prompt('Check outputs.');
 
-		expect(toolErrors).toHaveLength(3);
+		expect(toolErrors).toHaveLength(2);
 		for (const error of toolErrors) {
 			expect(error).toMatchObject({
 				role: 'toolResult',
@@ -532,6 +519,40 @@ describe('Action model tools', () => {
 				],
 			});
 		}
+	});
+
+	it('serializes an Action output with an unset optional property by omitting the undefined key', async () => {
+		const provider = createProvider();
+		const optionalOutput = defineAction({
+			name: 'optional_output',
+			description: 'Return an object with an unset optional property.',
+			async run() {
+				return { ok: true, detail: undefined } as never;
+			},
+		});
+		let toolResult: unknown;
+		provider.setResponses([
+			fauxAssistantMessage(fauxToolCall('optional_output', {}), { stopReason: 'toolUse' }),
+			(context) => {
+				toolResult = context.messages.at(-1);
+				return fauxAssistantMessage('Done.');
+			},
+		]);
+		const harness = await createContext(
+			provider,
+		).initializeRootHarness(
+			defineAgent(() => ({
+				model: `${provider.getModel().provider}/${provider.getModel().id}`,
+				actions: [optionalOutput],
+			})),
+		);
+
+		await (await harness.session()).prompt('Optional output.');
+
+		expect(toolResult).toMatchObject({
+			role: 'toolResult',
+			content: [{ type: 'text', text: '{"ok":true}' }],
+		});
 	});
 
 	it('rejects invalid and non-serializable Action output before returning a tool result', async () => {

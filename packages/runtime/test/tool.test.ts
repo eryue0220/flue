@@ -194,17 +194,14 @@ describe('defineTool()', () => {
 		});
 	});
 
-	it('rejects values that JSON.stringify would silently discard', async () => {
+	it('serializes output with an unset optional property by omitting the undefined key', async () => {
 		const tool = defineTool({
 			name: 'lookup',
 			description: 'Look up a value.',
 			run: async () => ({ kept: true, discarded: undefined }) as never,
 		});
 
-		await expect(validateAndRunTool(tool, {})).rejects.toMatchObject({
-			type: 'tool_output_serialization',
-			meta: { tool: 'lookup' },
-		});
+		await expect(validateAndRunTool(tool, {})).resolves.toEqual({ kept: true });
 	});
 
 	it('returns a detached JSON snapshot of output', async () => {
