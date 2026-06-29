@@ -249,13 +249,10 @@ export async function initializeRootHarness(
 		extendAgentProfile(resolveAgentProfile(resolvedOptions), {}),
 		'defineAgent()',
 	);
-	if (!hasInitModel(resolvedOptions)) {
+	if (typeof definition.model !== 'string') {
 		throw new Error(
 			'[flue] defineAgent() requires a model. Return { model: "provider-id/model-id" } or a profile with a model.',
 		);
-	}
-	if (typeof definition.model !== 'string') {
-		throw new Error('[flue] defineAgent() model must be a model specifier.');
 	}
 	const resolvedModel = config.agentConfig.resolveModel(definition.model);
 	if (!resolvedModel) {
@@ -329,12 +326,6 @@ function serializeLogError(error: Error): Record<string, unknown> {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-function hasInitModel(options: AgentRuntimeConfig | undefined): boolean {
-	return Boolean(
-		options && ('model' in options || (options.profile && 'model' in options.profile)),
-	);
-}
 
 function isSandboxFactory(value: unknown): value is SandboxFactory {
 	return (

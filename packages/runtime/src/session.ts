@@ -69,7 +69,6 @@ import {
 import {
 	getActiveConversationPath,
 	type ReducedConversationState,
-	type ReducedMessageEntry,
 	toolOutcomeKey,
 	toolResultEntryId,
 } from './conversation-reducer.ts';
@@ -1144,8 +1143,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 		await this.appendRepairedToolResultBatch(
 			partial.entryId,
 			partial.toolCalls,
-			messages,
-			conversation.activeLeafId,
 			conversation,
 			resolvedTaskOutcomes,
 		);
@@ -1295,19 +1292,15 @@ export class Session implements FlueSession, AgentSubmissionSession {
 	 * `toolCalls`, preserving already-settled results (first-write-wins), using a
 	 * pre-resolved outcome where one was produced (resumed subagent task), and
 	 * synthesizing interrupted-marker error results for the remaining unresolved
-	 * calls — never a fabricated or assumed outcome. Returns the new leaf ID, or
-	 * undefined when every call already has a result.
+	 * calls — never a fabricated or assumed outcome.
 	 */
 	private async appendRepairedToolResultBatch(
 		assistantEntryId: string,
 		toolCalls: ReadonlyArray<{ id: string; name: string }>,
-		following: ReducedMessageEntry[],
-		previousLeafId: string | null,
 		conversation: ReducedConversationState,
 		resolved: Map<string, ConversationRecord>,
-	): Promise<string | undefined> {
-		void following;
-		if (previousLeafId !== assistantEntryId) return undefined;
+	): Promise<void> {
+		if (conversation.activeLeafId !== assistantEntryId) return;
 		const finalToolCall = toolCalls.at(-1);
 		if (!finalToolCall) {
 			throw new ConversationRecordInvariantError({
@@ -1358,7 +1351,6 @@ export class Session implements FlueSession, AgentSubmissionSession {
 			outcomeIds,
 		}]);
 		await this.rebuildCanonicalContext();
-		return toolResultEntryId(assistantEntryId, finalToolCall.id);
 	}
 
 	async recoverInterruptedStream(
