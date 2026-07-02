@@ -1,3 +1,5 @@
+import type { DurableObject } from 'cloudflare:workers';
+
 const CLOUDFLARE_EXTENSION = Symbol.for('@flue/runtime/cloudflare-extension');
 
 /**
@@ -35,9 +37,31 @@ export type ExtensionClass<TInstance extends object = CloudflareAgentLike> = new
 	...args: any[]
 ) => TInstance;
 
-export interface CloudflareExtension<TBase extends object = CloudflareAgentLike> {
-	base?: <TClass extends ExtensionClass<TBase>>(Base: TClass) => ExtensionClass<TBase>;
-	wrap?: <TClass extends ExtensionClass<TBase>>(Final: TClass) => TClass;
+/**
+ * The class shape Flue hands to `base` and `wrap`: every class the generated
+ * Cloudflare entry passes in extends the Agents SDK `Agent`, which is a real,
+ * branded `DurableObject`. The `cloudflare:workers` import is type-only, so
+ * this module's runtime graph stays free of that virtual module; consumers of
+ * `@flue/runtime/cloudflare` are expected to have Cloudflare's workers types
+ * configured (any Wrangler project does).
+ *
+ * This is deliberately a concrete constructor type rather than a
+ * `<TClass extends ...>` generic: inside a generic callback the class is an
+ * opaque type parameter, and TypeScript will not infer a downstream wrapper's
+ * type parameters (e.g. Sentry's `instrumentDurableObjectWithSentry`) from a
+ * type parameter's constraint, so a generic signature here forces consumers
+ * back to the runtime assertions this type exists to eliminate.
+ */
+export type GeneratedDurableObjectClass<
+	TInstance extends object = CloudflareAgentLike,
+	TEnv = any,
+> = new (ctx: DurableObjectState, env: TEnv) => TInstance & DurableObject<TEnv>;
+
+export interface CloudflareExtension<TBase extends object = CloudflareAgentLike, TEnv = any> {
+	base?: (Base: GeneratedDurableObjectClass<TBase, TEnv>) => ExtensionClass<TBase>;
+	wrap?: (
+		Final: GeneratedDurableObjectClass<TBase, TEnv>,
+	) => GeneratedDurableObjectClass<TBase, TEnv>;
 }
 
 interface BrandedCloudflareExtension extends CloudflareExtension<any> {
@@ -50,9 +74,9 @@ export interface ResolvedCloudflareExtension {
 	wrap(Final: ExtensionClass<any>): ExtensionClass<any>;
 }
 
-export function extend<TBase extends object = CloudflareAgentLike>(
-	extension: CloudflareExtension<TBase>,
-): CloudflareExtension<TBase> {
+export function extend<TBase extends object = CloudflareAgentLike, TEnv = any>(
+	extension: CloudflareExtension<TBase, TEnv>,
+): CloudflareExtension<TBase, TEnv> {
 	if (typeof extension !== 'object' || extension === null || Array.isArray(extension)) {
 		throw new Error(
 			'[flue] extend() expects an object containing optional base and wrap callbacks.',

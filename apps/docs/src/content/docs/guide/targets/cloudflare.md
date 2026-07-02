@@ -285,18 +285,18 @@ Use `cloudflare.ts` for Worker-level events such as inbound email, queues, or cr
 ```ts
 import { extend } from '@flue/runtime/cloudflare';
 
-function extend<TBase extends object = CloudflareAgentLike>(
-  extension: CloudflareExtension<TBase>,
-): CloudflareExtension<TBase>;
+function extend<TBase extends object = CloudflareAgentLike, TEnv = any>(
+  extension: CloudflareExtension<TBase, TEnv>,
+): CloudflareExtension<TBase, TEnv>;
 ```
 
 Creates a branded Cloudflare extension descriptor for an agent or workflow module. The descriptor may contain `base` and `wrap` callbacks.
 
-Both callbacks are typed against `CloudflareAgentLike`, a structural view of the Agents SDK `Agent` base class covering `state`, `setState()`, `onStart()`, `schedule()`, `scheduleEvery()`, and `queue()`, so typos inside `base` callbacks fail at typecheck. Pass an explicit `TBase` (for example `extend<CloudflareAgentLike<MyState>>({ ... })`) to type against a richer class shape.
+Both callbacks are typed against `CloudflareAgentLike`, a structural view of the Agents SDK `Agent` base class covering `state`, `setState()`, `onStart()`, `schedule()`, `scheduleEvery()`, and `queue()`, so typos inside `base` callbacks fail at typecheck. Pass an explicit `TBase` (for example `extend<CloudflareAgentLike<MyState>>({ ... })`) to type against a richer class shape, and an explicit `TEnv` to type the `env` an instrumentation callback receives.
 
 `base(Base)` must return the received class or a subclass. Flue uses its return value as the superclass for the generated Durable Object.
 
-`wrap(Final)` must return the received class or a prototype-preserving constructor wrapper. Use it for integrations that instrument or proxy the final generated class without replacing its prototype. Subclasses are rejected; only the same class or a `new Proxy(Final, {...})` pattern is allowed.
+`wrap(Final)` must return the received class or a prototype-preserving constructor wrapper. Use it for integrations that instrument or proxy the final generated class without replacing its prototype. Subclasses are rejected; only the same class or a `new Proxy(Final, {...})` pattern is allowed. The class both callbacks receive is typed as a real Durable Object constructor, so brand-checked wrappers such as `@sentry/cloudflare`'s `instrumentDurableObjectWithSentry` accept it directly, with no casts or explicit generics.
 
 Both callbacks are optional. When omitted, the corresponding step is an identity operation.
 

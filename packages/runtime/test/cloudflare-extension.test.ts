@@ -1,3 +1,4 @@
+import type { DurableObject } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import {
 	type CloudflareAgentLike,
@@ -8,30 +9,46 @@ import {
 
 class Agent {}
 
+// Type-level regression for #410: `wrap` and `base` receive the concrete
+// branded generated Durable Object constructor, so brand-checked platform
+// instrumentation accepts it with no casts or runtime narrowing. The
+// signatures below mirror `@sentry/cloudflare`'s
+// `instrumentDurableObjectWithSentry` verbatim.
 interface ConsumerEnv {
-	readonly accountId: string;
+	readonly SENTRY_DSN: string;
 }
 
-type ConsumerDurableObject = DurableObject & CloudflareAgentLike;
-
-type ConsumerDurableObjectClass = new (
-	ctx: DurableObjectState,
-	env: ConsumerEnv,
-) => ConsumerDurableObject;
-
-function instrumentDurableObjectClass<TClass extends ConsumerDurableObjectClass>(
-	Class: TClass,
-): TClass {
-	return new Proxy(Class, {});
+interface ConsumerOptions {
+	readonly dsn: string;
 }
 
-extend<ConsumerDurableObject>({
-	wrap(Final) {
-		const generatedClass: ConsumerDurableObjectClass = Final;
-		const instrumentedClass = instrumentDurableObjectClass(Final);
-		const durableObjectClass: ConsumerDurableObjectClass = instrumentedClass;
-		return instrumentedClass;
-	},
+declare function instrumentDurableObjectWithSentry<
+	E,
+	T extends DurableObject<E>,
+	C extends new (state: DurableObjectState, env: E) => T,
+>(optionsCallback: (env: E) => ConsumerOptions, DurableObjectClass: C): C;
+
+// Consumer base types stay structural; they never have to extend
+// `DurableObject<Env>` themselves (its `ctx` is protected, which conflicts
+// with bases that model a narrower public `ctx`).
+interface ConsumerBase extends CloudflareAgentLike {
+	ctx: { storage: { get(key: string): Promise<unknown> } };
+}
+
+extend<ConsumerBase, ConsumerEnv>({
+	wrap: (Final) =>
+		instrumentDurableObjectWithSentry((env: ConsumerEnv) => ({ dsn: env.SENTRY_DSN }), Final),
+});
+
+// The default-typed surface accepts the same pass-through.
+extend({
+	wrap: (Final) =>
+		instrumentDurableObjectWithSentry((env: ConsumerEnv) => ({ dsn: env.SENTRY_DSN }), Final),
+});
+
+// `base` subclassing keeps working against the branded constructor.
+extend<ConsumerBase, ConsumerEnv>({
+	base: (Base) => class extends Base {},
 });
 
 describe('resolveCloudflareExtension()', () => {

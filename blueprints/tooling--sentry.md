@@ -221,7 +221,6 @@ workflow definition export:
 ```ts
 import * as Sentry from '@sentry/cloudflare';
 import { extend } from '@flue/runtime/cloudflare';
-import type { DurableObject } from 'cloudflare:workers';
 
 interface Env {
   SENTRY_DSN?: string;
@@ -229,7 +228,7 @@ interface Env {
   SENTRY_RELEASE?: string;
 }
 
-export const cloudflare = extend<DurableObject<Env>>({
+export const cloudflare = extend({
   wrap: (Final) =>
     Sentry.instrumentDurableObjectWithSentry(
       (env: Env) => ({
@@ -248,9 +247,10 @@ export const cloudflare = extend<DurableObject<Env>>({
 The export must be in each discovered `agents/<name>.ts` and
 `workflows/<name>.ts` module, not only in source-root `app.ts` or
 `cloudflare.ts`. Flue applies `wrap` after constructing its final generated
-Durable Object class. The explicit `DurableObject<Env>` generic exposes the
-runtime class shape required by Sentry's TypeScript signature. Do not replace
-Flue-owned lifecycle methods or return a subclass.
+Durable Object class, and types the class it hands to `wrap` as the branded
+Durable Object constructor Sentry's TypeScript signature requires, so the
+pass-through needs no generics, casts, or runtime constructability checks. Do
+not replace Flue-owned lifecycle methods or return a subclass.
 
 Configure `SENTRY_DSN` through a Worker secret or environment binding according
 to the project's policy. For local Wrangler development, follow the existing
